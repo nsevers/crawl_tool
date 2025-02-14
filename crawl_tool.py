@@ -6,9 +6,8 @@ from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 from crawl4ai.content_filter_strategy import PruningContentFilter
 from crawl4ai.extraction_strategy import LLMExtractionStrategy
 from pydantic import BaseModel, Field
-from typing import List
-import os
 from typing import List, Optional, Set, Dict
+import os
 
 class ExtractedContent(BaseModel):
     content: str = Field(..., description="Extracted relevant content")
