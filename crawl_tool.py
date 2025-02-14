@@ -39,7 +39,9 @@ class WebCrawler:
                 "headers": {
                     "HTTP-Referer": "https://github.com/your-repo",
                     "X-Title": "Crawl4AI Research Tool",
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://github.com/your-project",
+                    "X-Title": "Anchor IDL Documentation Extraction"
                 },
                 "temperature": 0.3,
                 "top_p": 0.9
@@ -219,19 +221,24 @@ class WebCrawler:
                             try:
                                 import json  # Add missing import
                                 extracted = json.loads(result.extracted_content)
-                            except json.JSONDecodeError as e:
+                                # Validate we got the expected fields
+                                if not all('content' in item and 'relevance_score' in item and 'source_url' in item for item in extracted):
+                                    raise ValueError("Missing required fields in LLM response")
+                                    
+                            except (json.JSONDecodeError, ValueError) as e:
                                 print(f"Failed to parse LLM response: {str(e)}")
                                 if retry_count < 3:
                                     print(f"Retrying... ({retry_count + 1}/3)")
                                     return await self.crawl(url, output_file, user_prompt, retry_count + 1)
                                 else:
                                     print("Maximum retries exceeded. Falling back to full page scrape.")
-                                    # Use crawl4ai's built-in markdown generation when fallback needed
+                                    # Fallback to using cleaned HTML with source URL
                                     extracted = [{
-                                        "content": result.markdown_v2.raw_markdown,
-                                        "relevance_score": 1.0, 
-                                        "source_url": link_url
+                                        "content": result.cleaned_html or result.markdown_v2.raw_markdown,
+                                        "relevance_score": 1.0,
+                                        "source_url": link_url 
                                     }]
+                                    print("Fallback to HTML content due to LLM parsing error")
                             for item in extracted:
                                 content_item = ExtractedContent(**item)
                                 if content_item.relevance_score >= 0.5:  # Threshold
