@@ -19,10 +19,12 @@ class WebCrawler:
     def __init__(self, verbose: bool = True):
         # Verify OpenRouter API key (check for placeholder value)
         api_key = os.getenv("OPENROUTER_API_KEY")
-        if not api_key or api_key.startswith("sk-or-your-key-here"):
+        if not api_key or api_key == "sk-or-your-key-here":
             raise ValueError(
                 "Missing or invalid OPENROUTER_API_KEY in .env file\n"
-                "Get your key from https://openrouter.ai/keys and update .env from .env.template"
+                "1. Get your key from https://openrouter.ai/keys\n"
+                "2. Copy .env.template to .env\n"
+                "3. Replace the placeholder key with your actual key"
             )
 
         # Initialize LLM extraction strategy with OpenRouter
