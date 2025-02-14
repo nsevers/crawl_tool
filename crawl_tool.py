@@ -1,6 +1,7 @@
 import asyncio
 import re
 from urllib.parse import urljoin, urlparse, urldefrag
+from dotenv import load_dotenv
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 from crawl4ai.content_filter_strategy import PruningContentFilter
@@ -369,6 +370,9 @@ async def main():
 
     crawler = WebCrawler(verbose=True)
     await crawler.crawl(url, "", user_prompt if len(user_prompt) > 10 else None)
+
+# Load environment variables first thing
+load_dotenv()
 
 if __name__ == "__main__":
     asyncio.run(main())
