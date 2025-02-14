@@ -23,7 +23,7 @@ class WebCrawler:
 
         # Initialize LLM extraction strategy with OpenRouter
         self.llm_strategy = LLMExtractionStrategy(
-            provider="openrouter/google-palm",  # Default model
+            provider=os.getenv("OPENROUTER_MODEL", "deepseek-ai/deepseek-r1"),
             api_token=os.getenv("OPENROUTER_API_KEY"),
             extraction_type="schema",
             chunk_token_threshold=4096,
@@ -197,8 +197,12 @@ class WebCrawler:
 
     async def crawl(self, url: str, output_file: str, user_prompt: str = None) -> None:
         """Crawl the website and save content to markdown file."""
+        # Create research directory if needed
+        os.makedirs('research', exist_ok=True)
+        
         if not output_file.endswith('.md'):
             output_file += '.md'
+        output_file = os.path.join('research', output_file)
 
         # Remove any fragment identifier from the URL
         url, _ = urldefrag(url)
@@ -208,8 +212,11 @@ class WebCrawler:
         all_content = []
         processed_urls = set()
 
+        # Validate URL format
+        if not re.match(r'^https?://(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&//=]*)$', url):
+            raise ValueError(f"Invalid URL format: {url}")
+            
         # Validate prompt or set default behavior
-        if not user_prompt or len(user_prompt.strip()) < 10:
             print("\nWarning: No valid prompt provided. Extracting all content from landing page...")
             user_prompt = "Extract all meaningful content from the page, " \
                           "focusing on technical documentation, API references, " \

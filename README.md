@@ -21,9 +21,9 @@ Extensibility for Dynamic Sites
 Integrate with Crawl4AI’s advanced features (JavaScript injection, waiting for specific events, multi-step flows) to handle “Load More” buttons or multi-page forms.
 
 Ease of Use
-1. Input a URL
-2. Input prompt - The AI will use this to determine relevance of content
-3. Output filename - Content will be saved in markdown format
+1. Input a URL - Must be a valid web address starting with http:// or https://
+2. Input prompt - This guides the AI in determining content relevance (e.g. "Documentation about API endpoints")
+3. Output filename - Content will be saved in markdown format in the 'research' folder
 4. The AI will:
    - Crawl only within the starting URL's folder structure
    - Use AI (via OpenRouter) to filter content based on relevance
