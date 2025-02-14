@@ -11,9 +11,9 @@ from typing import List, Optional, Set, Dict
 import os
 
 class ExtractedContent(BaseModel):
-    content: str = Field(..., description="Extracted relevant content")
-    relevance_score: float = Field(..., description="Score between 0-1 of relevance to prompt")
-    source_url: str = Field(..., description="URL where content was found")
+    relevant_urls: List[str] = Field(..., description="List of URLs relevant to the research prompt")
+    relevance_reasons: List[str] = Field(..., description="Brief reason for each URL's relevance")
+    main_topic: str = Field(..., description="Primary topic identified from landing page")
 
 class WebCrawler:
     def __init__(self, verbose: bool = True):
@@ -256,15 +256,19 @@ class WebCrawler:
                                 else:
                                     print(f"Maximum retries exceeded. Aborting crawl. Error: {str(e)}")
                                     raise  # Re-raise the error to exit
-                            for item in extracted:
-                                content_item = ExtractedContent(**item)
-                                if content_item.relevance_score >= 0.5:  # Threshold
-                                    all_content.append(
-                                        f"\n## Source: {content_item.source_url}\n"
-                                        f"### Relevance Score: {content_item.relevance_score:.2f}\n"
-                                        f"{content_item.content}\n"
-                                    )
-                                processed_urls.add(link_url)
+                            # Process LLM response with URL recommendations
+                            content_item = ExtractedContent(**extracted[0])
+                            print(f"LLM identified {len(content_item.relevant_urls)} relevant URLs")
+                                
+                            # Crawl only LLM-recommended URLs
+                            for url, reason in zip(content_item.relevant_urls, content_item.relevance_reasons):
+                                if url not in processed_urls and link_filter(url):
+                                    print(f"Crawling LLM-recommended URL: {url} ({reason})")
+                                    result = await crawler.arun(url=url, config=run_config)
+                                    if result.success:
+                                        content = result.markdown_v2.raw_markdown
+                                        all_content.append(f"# {content_item.main_topic}\n\n## {url}\n\n{content}")
+                                        processed_urls.add(url)
                                 print(f"✓ Successfully processed: {link_url}")
                             else:
                                 print(f"✗ No content extracted from: {link_url}")
