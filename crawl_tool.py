@@ -129,9 +129,17 @@ class WebCrawler:
         processed_urls = set()
 
         # Validate URL format up front (more flexible pattern)
+        print(f"\nDEBUG: Validating URL: {url}")
         url_pattern = r'^https?://([^\s/:?#]+\.)+[^\s/:?#]+(\/[^\s?#\/]+)*$'
-        if not re.match(url_pattern, url, re.IGNORECASE):
+        match = re.match(url_pattern, url, re.IGNORECASE)
+        if not match:
+            print(f"DEBUG: URL validation failed")
+            print(f"DEBUG: URL parts:")
+            print(f"- Protocol: {urlparse(url).scheme}")
+            print(f"- Domain: {urlparse(url).netloc}")
+            print(f"- Path: {urlparse(url).path}")
             raise ValueError(f"Invalid URL format: {url}\nPlease ensure it starts with http:// or https:// and has a valid domain structure")
+        print(f"DEBUG: URL validation passed")
 
         # Validate prompt or set default behavior
         if not user_prompt or len(user_prompt) < 10:
