@@ -293,8 +293,12 @@ async def main():
     print("==================")
     
     url = input("\nEnter URL: ").strip()
+    if not url:
+        raise ValueError("URL cannot be empty")
+        
     user_prompt = input("Enter research prompt (or leave empty for full extraction): ").strip()
 
+    print(f"\nStarting crawl of: {url}")
     crawler = WebCrawler(verbose=True)
     await crawler.crawl(url, "", user_prompt if len(user_prompt) > 10 else None)
 
