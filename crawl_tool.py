@@ -29,7 +29,7 @@ class WebCrawler:
 
         # Initialize LLM extraction strategy with OpenRouter per LiteLLM docs
         self.llm_strategy = LLMExtractionStrategy(
-            provider="openrouter",
+            provider="openrouter_ai",  # Correct provider name per LiteLLM docs
             model=os.getenv("OPENROUTER_MODEL", "openrouter/google/palm-2-chat-bison"),
             api_token=api_key,
             extraction_type="schema",
@@ -109,106 +109,6 @@ class WebCrawler:
         return link_filter
 
     @staticmethod
-    def clean_content(html_content: str, base_url: str) -> str:
-        """Clean and convert HTML to markdown while preserving important elements."""
-        def handle_table(match):
-            table_html = match.group(0)
-            markdown_table = []
-            
-            # Extract rows
-            rows = re.findall(r'<tr[^>]*>(.*?)</tr>', table_html, re.DOTALL)
-            if not rows:
-                return ''
-                
-            # Process header row
-            header_cells = re.findall(r'<th[^>]*>(.*?)</th>', rows[0], re.DOTALL)
-            if header_cells:
-                markdown_table.append('| ' + ' | '.join(re.sub(r'<[^>]+>', '', cell.strip()) for cell in header_cells) + ' |')
-                markdown_table.append('|' + '---|' * len(header_cells))
-            
-            # Process data rows
-            for row in rows[1:] if header_cells else rows:
-                cells = re.findall(r'<td[^>]*>(.*?)</td>', row, re.DOTALL)
-                if cells:
-                    markdown_table.append('| ' + ' | '.join(re.sub(r'<[^>]+>', '', cell.strip()) for cell in cells) + ' |')
-            
-            return '\n'.join(markdown_table)
-
-        def handle_code(match):
-            code = match.group(1).strip() if match.group(1) else match.group(2).strip()
-            # Look for a language class in the code tag
-            class_match = re.search(r'<code[^>]*class="([^"]*)"', match.group(0))
-            lang = ''
-            if class_match:
-                classes = class_match.group(1).split()
-                for cls in classes:
-                    if cls.startswith('language-'):
-                        lang = cls.replace('language-', '')
-                        break
-            if not lang:
-                lang = 'rust'  # Default to rust for docs.rs
-            return f'\n```{lang}\n{code}\n```\n'
-
-        def handle_link(match):
-            href = match.group(1)
-            text = match.group(2)
-            if not href.startswith(('http:', 'https:')):
-                href = urljoin(base_url, href)
-            # Keep the original link text and URL
-            return f'[{text}]({href})'
-
-        def clean_text(text):
-            # Remove comments
-            text = re.sub(r'<!--.*?-->', '', text, flags=re.DOTALL)
-            
-            # Handle code blocks first (supports both pre/code and standalone code blocks)
-            text = re.sub(r'<pre[^>]*><code[^>]*>(.*?)</code></pre>|<code[^>]*>(.*?)</code>', 
-                         lambda m: handle_code(m), text, flags=re.DOTALL)
-            
-            # Handle inline code differently
-            text = re.sub(r'<code[^>]*>(.*?)</code>', r'`\1`', text, flags=re.DOTALL)
-            
-            # Handle tables
-            text = re.sub(r'<table[^>]*>.*?</table>', handle_table, text, flags=re.DOTALL)
-            
-            # Handle headers
-            text = re.sub(r'<h1[^>]*>(.*?)</h1>', r'\n# \1\n', text)
-            text = re.sub(r'<h2[^>＊]*>(.*?)</h2>', r'\n## \1\n', text)
-            text = re.sub(r'<h3[^>]*>(.*?)</h3>', r'\n### \1\n', text)
-            text = re.sub(r'<h4[^>]*>(.*?)</h4>', r'\n#### \1\n', text)
-            
-            # Handle lists
-            text = re.sub(r'<ul[^>]*>(.*?)</ul>', 
-                         lambda m: '\n' + re.sub(r'<li[^>]*>(.*?)</li>', r'* \1\n', m.group(1)), 
-                         text, flags=re.DOTALL)
-            text = re.sub(r'<ol[^>]*>(.*?)</ol>', 
-                         lambda m: '\n' + re.sub(r'<li[^>]*>(.*?)</li>', r'1. \1\n', m.group(1)), 
-                         text, flags=re.DOTALL)
-            
-            # Handle links
-            text = re.sub(r'<a[^>]*href="([^"]*)"[^>]*>(.*?)</a>', handle_link, text)
-            
-            # Handle emphasis
-            text = re.sub(r'<(?:b|strong)[^>]*>(.*?)</(?:b|strong)>', r'**\1**', text)
-            text = re.sub(r'<(?:i|em)[^>]*>(.*?)</(?:i|em)>', r'*\1*', text)
-            
-            # Handle paragraphs and line breaks
-            text = re.sub(r'<(?:p|div|section)[^>]*>(.*?)</(?:p|div|section)>', r'\n\n\1\n\n', text, flags=re.DOTALL)
-            text = re.sub(r'<br[^>]*>', '\n', text)
-            
-            # Remove remaining HTML tags
-            text = re.sub(r'<[^>]+>', ' ', text)
-            
-            # Clean up entities
-            text = text.replace('&lt;', '<').replace('&gt;', '>').replace('&amp;', '&').replace('&quot;', '"')
-            
-            # Clean up whitespace
-            text = re.sub(r'\n\s*\n+', '\n\n', text)
-            text = '\n'.join(line.strip() for line in text.splitlines())
-            
-            return text.strip()
-
-        return clean_text(html_content)
 
     async def crawl(self, url: str, output_file: str, user_prompt: str = None, retry_count: int = 0) -> None:
         """Crawl the website and save content to markdown file."""
@@ -275,7 +175,8 @@ class WebCrawler:
 
                 # Process landing page content
                 if hasattr(initial_result, "html"):
-                    content = self.clean_content(initial_result.html, base_url)
+                    # Use crawl4ai's cleaned markdown output directly
+                    content = initial_result.markdown_v2.raw_markdown
                     if content:
                         print(f"\n✓ Successfully processed landing page: {url}")
                         all_content.append(f"# Documentation from {url}\n\n{content}\n")
@@ -302,6 +203,7 @@ class WebCrawler:
                         if result.success and hasattr(result, "html"):
                             # Extract content using LLM with relevance scoring
                             try:
+                                import json  # Add missing import
                                 extracted = json.loads(result.extracted_content)
                             except json.JSONDecodeError as e:
                                 print(f"Failed to parse LLM response: {str(e)}")
@@ -310,7 +212,12 @@ class WebCrawler:
                                     return await self.crawl(url, output_file, user_prompt, retry_count + 1)
                                 else:
                                     print("Maximum retries exceeded. Falling back to full page scrape.")
-                                    extracted = [{"content": self.clean_content(result.html, base_url), "relevance_score": 1.0, "source_url": link_url}]
+                                    # Use crawl4ai's built-in markdown generation when fallback needed
+                                    extracted = [{
+                                        "content": result.markdown_v2.raw_markdown,
+                                        "relevance_score": 1.0, 
+                                        "source_url": link_url
+                                    }]
                             for item in extracted:
                                 content_item = ExtractedContent(**item)
                                 if content_item.relevance_score >= 0.5:  # Threshold
