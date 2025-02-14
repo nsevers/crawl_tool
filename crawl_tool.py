@@ -10,14 +10,21 @@ from typing import List
 import os
 from typing import List, Optional, Set, Dict
 
+class ExtractedContent(BaseModel):
+    content: str = Field(..., description="Extracted relevant content")
+    relevance_score: float = Field(..., description="Score between 0-1 of relevance to prompt")
+    source_url: str = Field(..., description="URL where content was found")
+
 class WebCrawler:
     def __init__(self, verbose: bool = True):
-        # Initialize LLM extraction strategy
+        # Initialize LLM extraction strategy with OpenRouter
         self.llm_strategy = LLMExtractionStrategy(
-            provider="openai/gpt-4o",
-            api_token=os.getenv("OPENAI_API_KEY"),
+            provider="openrouter/google-palm",  # Default model
+            api_token=os.getenv("OPENROUTER_API_KEY"),
             extraction_type="schema",
             chunk_token_threshold=4096,
+            base_url="https://openrouter.ai/api/v1",
+            extra_args={"headers": {"HTTP-Referer": "https://github.com/your-repo"}},
             verbose=verbose
         )
         
@@ -184,7 +191,7 @@ class WebCrawler:
 
         return clean_text(html_content)
 
-    async def crawl(self, url: str, output_file: str, user_prompt: str) -> None:
+    async def crawl(self, url: str, output_file: str, user_prompt: str = None) -> None:
         """Crawl the website and save content to markdown file."""
         if not output_file.endswith('.md'):
             output_file += '.md'
@@ -197,8 +204,17 @@ class WebCrawler:
         all_content = []
         processed_urls = set()
 
-        # Configure the crawler
+        # Validate prompt or set default behavior
+        if not user_prompt or len(user_prompt.strip()) < 10:
+            print("\nWarning: No valid prompt provided. Extracting all content from landing page...")
+            user_prompt = "Extract all meaningful content from the page, " \
+                          "focusing on technical documentation, API references, " \
+                          "and developer guides."
+
+        # Configure the crawler with LLM strategy
+        self.llm_strategy.instruction = user_prompt
         run_config = CrawlerRunConfig(
+            extraction_strategy=self.llm_strategy,
             cache_mode=CacheMode.BYPASS,
             markdown_generator=self.md_generator,
             verbose=True,
@@ -257,9 +273,16 @@ class WebCrawler:
                         result = await crawler.arun(url=link_url, config=run_config)
                         
                         if result.success and hasattr(result, "html"):
-                            content = self.clean_content(result.html, base_url)
-                            if content:
-                                all_content.append(f"\n{'=' * 80}\n# Documentation from {link_url}\n{'=' * 80}\n\n{content}\n")
+                            # Extract content using LLM with relevance scoring
+                            extracted = json.loads(result.extracted_content)
+                            for item in extracted:
+                                content_item = ExtractedContent(**item)
+                                if content_item.relevance_score >= 0.5:  # Threshold
+                                    all_content.append(
+                                        f"\n## Source: {content_item.source_url}\n"
+                                        f"### Relevance Score: {content_item.relevance_score:.2f}\n"
+                                        f"{content_item.content}\n"
+                                    )
                                 processed_urls.add(link_url)
                                 print(f"✓ Successfully processed: {link_url}")
                             else:
