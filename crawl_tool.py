@@ -29,8 +29,8 @@ class WebCrawler:
 
         # Initialize LLM extraction strategy with OpenRouter 
         self.llm_strategy = LLMExtractionStrategy(
-            provider="openrouter_ai",
-            model=os.getenv("OPENROUTER_MODEL", "deepseek-ai/deepseek-r1"),
+            provider="openrouter",
+            model=os.getenv("OPENROUTER_MODEL", "openrouter/deepseek-ai/deepseek-r1"),
             api_token=api_key,
             extraction_type="schema",
             schema=ExtractedContent.schema(),
@@ -42,13 +42,15 @@ class WebCrawler:
             ),
             chunk_token_threshold=4096,
             base_url="https://openrouter.ai/api/v1",
+            api_base="https://openrouter.ai/api/v1",
             extra_args={
                 "headers": {
                     "HTTP-Referer": "https://github.com/your-repo",
                     "X-Title": "Crawl4AI Research Tool",
                     "Content-Type": "application/json",
                     "HTTP-Referer": "https://github.com/your-project",
-                    "X-Title": "Anchor IDL Documentation Extraction"
+                    "X-Title": "Anchor IDL Documentation Extraction",
+                    "X-API-Key": os.getenv("OPENROUTER_API_KEY")
                 },
                 "temperature": 0.3,
                 "top_p": float(os.getenv("TOP_P", "0.9")),
@@ -231,13 +233,26 @@ class WebCrawler:
                                 import json  # Add missing import
                                 extracted = json.loads(result.extracted_content)
                                 # Validate we got the expected fields
-                                if not all('content' in item and 'relevance_score' in item and 'source_url' in item for item in extracted):
-                                    raise ValueError("Missing required fields in LLM response")
-                                    
-                            except (json.JSONDecodeError, ValueError) as e:
+                                # Validate and filter responses
+                                valid_entries = []
+                                for item in extracted:
+                                    if all(k in item for k in ('content', 'relevance_score', 'source_url')):
+                                        valid_entries.append(item)
+                                    else:
+                                        print(f"Invalid LLM response item: {json.dumps(item, indent=2)}")
+                                
+                                if not valid_entries:
+                                    raise ValueError("No valid extracted content found in LLM response")
+                                
+                                extracted = valid_entries
+                                
+                            except (json.JSONDecodeError, ValueError, KeyError) as e:
                                 print(f"Failed to parse LLM response: {str(e)}")
-                                if retry_count < 3:
-                                    print(f"Retrying... ({retry_count + 1}/3)")
+                                if retry_count < 2:
+                                    print(f"Retrying with simpler config... ({retry_count + 1}/2)")
+                                    # Simplify config for retry
+                                    self.llm_strategy.provider = "openai"
+                                    self.llm_strategy.model = "gpt-3.5-turbo"
                                     return await self.crawl(url, output_file, user_prompt, retry_count + 1)
                                 else:
                                     print("Maximum retries exceeded. Falling back to full page scrape.")
