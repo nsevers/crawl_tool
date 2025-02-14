@@ -27,12 +27,19 @@ class WebCrawler:
                 "3. Valid keys start with 'sk-or-'"
             )
 
-        # Initialize LLM extraction strategy with OpenRouter per LiteLLM docs
+        # Initialize LLM extraction strategy with OpenRouter 
         self.llm_strategy = LLMExtractionStrategy(
-            provider="openrouter_ai",  # Correct provider name per LiteLLM docs
-            model=os.getenv("OPENROUTER_MODEL", "openrouter/google/palm-2-chat-bison"),
+            provider="openrouter_ai",
+            model=os.getenv("OPENROUTER_MODEL", "deepseek-ai/deepseek-r1"),
             api_token=api_key,
             extraction_type="schema",
+            schema=ExtractedContent.schema(),
+            instruction=(
+                "Extract documentation about IDL generation and integration with "
+                "complete technical details, code samples and configuration. "
+                "Include these 3 fields in JSON: "
+                "content (full text with code), relevance_score (0-1), source_url"
+            ),
             chunk_token_threshold=4096,
             base_url="https://openrouter.ai/api/v1",
             extra_args={
@@ -44,7 +51,9 @@ class WebCrawler:
                     "X-Title": "Anchor IDL Documentation Extraction"
                 },
                 "temperature": 0.3,
-                "top_p": 0.9
+                "top_p": 0.9,
+                "response_format": {"type": "json_object"},
+                "max_tokens": 2000
             },
             verbose=verbose
         )
