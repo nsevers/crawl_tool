@@ -29,18 +29,15 @@ class WebCrawler:
 
         # Initialize LLM extraction strategy with OpenRouter 
         self.llm_strategy = LLMExtractionStrategy(
-            provider="openrouter/deepseek-ai/deepseek-r1",
+            provider=f"openrouter/{os.getenv('OPENROUTER_MODEL', 'meta-llama/llama-3-70b-instruct')}",
             api_token=api_key,
             extraction_type="schema",
             schema=ExtractedContent.model_json_schema(),
             instruction=(
-                "Extract documentation about IDL generation and integration with "
-                "complete technical details, code samples and configuration. "
-                "Include these 3 fields in JSON: "
-                "content (full text with code), relevance_score (0-1), source_url"
+                "Analyze the landing page and identify relevant URLs for documentation research. "
+                "Return JSON with: 1) relevant_urls 2) brief relevance_reasons 3) main_topic. "
+                "Only include URLs within the same documentation section/subfolder."
             ),
-            chunk_token_threshold=4096,
-            base_url="https://openrouter.ai/api/v1",
             api_base="https://openrouter.ai/api/v1",
             extra_args={
                 "headers": {
