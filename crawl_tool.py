@@ -129,7 +129,7 @@ class WebCrawler:
         processed_urls = set()
 
         # Validate URL format up front (more flexible pattern)
-        url_pattern = r'^https?://(?:www\.)?[\w-]+\.[\w.]+(?:/[\w-\./?&=#%+]*)?$'
+        url_pattern = r'^https?://(?:www\.)?[\w-]+\.[\w.]+(?:/[\w./?&=#%+-]*)?$'
         if not re.match(url_pattern, url, re.IGNORECASE):
             raise ValueError(f"Invalid URL format: {url}\nPlease ensure it starts with http:// or https:// and has a valid domain structure")
 
