@@ -32,7 +32,6 @@ class WebCrawler:
             provider="openrouter/deepseek-ai/deepseek-r1",
             api_token=api_key,
             extraction_type="schema",
-            api_base="https://openrouter.ai/api/v1",
             schema=ExtractedContent.model_json_schema(),
             instruction=(
                 "Extract documentation about IDL generation and integration with "
