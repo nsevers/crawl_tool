@@ -29,11 +29,11 @@ class WebCrawler:
 
         # Initialize LLM extraction strategy with OpenRouter 
         self.llm_strategy = LLMExtractionStrategy(
-            provider="openrouter",
-            model=os.getenv("OPENROUTER_MODEL", "openrouter/deepseek-ai/deepseek-r1"),
+            provider="openrouter/deepseek-ai/deepseek-r1",
             api_token=api_key,
             extraction_type="schema",
-            schema=ExtractedContent.schema(),
+            api_base="https://openrouter.ai/api/v1",
+            schema=ExtractedContent.model_json_schema(),
             instruction=(
                 "Extract documentation about IDL generation and integration with "
                 "complete technical details, code samples and configuration. "
@@ -250,19 +250,13 @@ class WebCrawler:
                                 print(f"Failed to parse LLM response: {str(e)}")
                                 if retry_count < 2:
                                     print(f"Retrying with simpler config... ({retry_count + 1}/2)")
-                                    # Simplify config for retry
-                                    self.llm_strategy.provider = "openai"
-                                    self.llm_strategy.model = "gpt-3.5-turbo"
+                                    # Simplify config for retry with more reliable model
+                                    self.llm_strategy.provider = "openrouter/meta-llama/llama-3-70b-instruct"
+                                    self.llm_strategy.instruction = "Extract technical documentation with source URLs"  # Simpler instruction
                                     return await self.crawl(url, output_file, user_prompt, retry_count + 1)
                                 else:
-                                    print("Maximum retries exceeded. Falling back to full page scrape.")
-                                    # Fallback to using cleaned HTML with source URL
-                                    extracted = [{
-                                        "content": result.cleaned_html or result.markdown_v2.raw_markdown,
-                                        "relevance_score": 1.0,
-                                        "source_url": link_url 
-                                    }]
-                                    print("Fallback to HTML content due to LLM parsing error")
+                                    print(f"Maximum retries exceeded. Aborting crawl. Error: {str(e)}")
+                                    raise  # Re-raise the error to exit
                             for item in extracted:
                                 content_item = ExtractedContent(**item)
                                 if content_item.relevance_score >= 0.5:  # Threshold
