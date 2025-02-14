@@ -108,8 +108,6 @@ class WebCrawler:
             
         return link_filter
 
-    @staticmethod
-
     async def crawl(self, url: str, output_file: str, user_prompt: str = None, retry_count: int = 0) -> None:
         """Crawl the website and save content to markdown file."""
         # Validate URL format up front
