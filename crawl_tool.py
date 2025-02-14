@@ -17,29 +17,32 @@ class ExtractedContent(BaseModel):
 
 class WebCrawler:
     def __init__(self, verbose: bool = True):
-        # Verify OpenRouter API key (check for placeholder value)
+        # Verify OpenRouter API key format
         api_key = os.getenv("OPENROUTER_API_KEY")
-        if api_key == "sk-or-your-key-here" or not api_key:
+        if not api_key or not api_key.startswith("sk-or-"):
             raise ValueError(
-                "Missing or invalid OPENROUTER_API_KEY in .env file\n"
+                "Invalid OpenRouter API key format\n"
                 "1. Get your key from https://openrouter.ai/keys\n"
-                "2. Update .env file with your actual key"
+                "2. Update .env file with your actual key\n"
+                "3. Valid keys start with 'sk-or-'"
             )
 
         # Initialize LLM extraction strategy with OpenRouter per LiteLLM docs
         self.llm_strategy = LLMExtractionStrategy(
-            provider="openrouter",  # Must be exactly "openrouter"
-            model=os.getenv("OPENROUTER_MODEL", "openrouter/auto"),  # Use openrouter/ prefix
-            api_token=os.getenv("OPENROUTER_API_KEY"),
+            provider="openrouter",
+            model=os.getenv("OPENROUTER_MODEL", "openrouter/google/palm-2-chat-bison"),
+            api_token=api_key,
             extraction_type="schema",
             chunk_token_threshold=4096,
             base_url="https://openrouter.ai/api/v1",
             extra_args={
                 "headers": {
-                    "HTTP-Referer": "https://github.com/your-repo",  # Required by OpenRouter
-                    "X-Title": "Crawl4AI Research Tool"  # Identify your project
+                    "HTTP-Referer": "https://github.com/your-repo",
+                    "X-Title": "Crawl4AI Research Tool",
+                    "Content-Type": "application/json"
                 },
-                "temperature": 0.3  # Add sampling parameters
+                "temperature": 0.3,
+                "top_p": 0.9
             },
             verbose=verbose
         )
@@ -229,10 +232,6 @@ class WebCrawler:
         if not re.match(r'^https?://(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&//=]*)$', url):
             raise ValueError(f"Invalid URL format: {url}")
 
-        # Validate API key
-        if not os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENROUTER_API_KEY", "").startswith("sk-or-"):
-            raise ValueError("Missing or invalid OPENROUTER_API_KEY in .env file")
-            
         # Validate prompt or set default behavior
             print("\nWarning: No valid prompt provided. Extracting all content from landing page...")
             user_prompt = "Extract all meaningful content from the page, " \
