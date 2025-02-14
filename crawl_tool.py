@@ -112,30 +112,11 @@ class WebCrawler:
 
     async def crawl(self, url: str, output_file: str, user_prompt: str = None, retry_count: int = 0) -> None:
         """Crawl the website and save content to markdown file."""
+        # Validate URL format up front
+        print(f"\nDEBUG: Validating URL: {url!r}")  # Show exact URL content
         if not url:
             raise ValueError("URL cannot be empty")
             
-        # Store original URL for later use
-        original_url = url
-        
-        # Remove any fragment identifier from the URL first
-        url, _ = urldefrag(url)
-        base_url = url
-        
-        # Generate filename based on URL structure
-        parsed_url = urlparse(url)
-        domain_parts = parsed_url.netloc.split('.')
-        path_parts = parsed_url.path.strip('/').split('/')
-        filename = f"{domain_parts[-2] if len(domain_parts) > 1 else domain_parts[0]}_{path_parts[-1] if path_parts else 'index'}.md"
-        output_file = os.path.join('research', filename)
-        os.makedirs('research', exist_ok=True)
-        
-        # Track all content
-        all_content = []
-        processed_urls = set()
-
-        # Validate URL format up front (more flexible pattern)
-        print(f"\nDEBUG: Validating URL: {url}")
         url_pattern = r'^https?://([^\s/:?#]+\.)+[^\s/:?#]+(\/[^\s?#\/]+)*$'
         match = re.match(url_pattern, url, re.IGNORECASE)
         if not match:
@@ -146,6 +127,25 @@ class WebCrawler:
             print(f"- Path: {urlparse(url).path}")
             raise ValueError(f"Invalid URL format: {url}\nPlease ensure it starts with http:// or https:// and has a valid domain structure")
         print(f"DEBUG: URL validation passed")
+
+        # Store original URL for later use
+        original_url = url
+        
+        # Remove any fragment identifier from the URL
+        url, _ = urldefrag(url)
+        base_url = url
+        
+        # Generate filename based on URL structure 
+        parsed_url = urlparse(url)
+        domain_parts = parsed_url.netloc.split('.')
+        path_parts = parsed_url.path.strip('/').split('/')
+        filename = f"{domain_parts[-2] if len(domain_parts) > 1 else domain_parts[0]}_{path_parts[-1] if path_parts else 'index'}.md"
+        output_file = os.path.join('research', filename)
+        os.makedirs('research', exist_ok=True)
+        
+        # Track all content
+        all_content = []
+        processed_urls = set()
 
         # Validate prompt or set default behavior
         if not user_prompt or len(user_prompt) < 10:
