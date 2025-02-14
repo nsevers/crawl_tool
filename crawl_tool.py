@@ -23,7 +23,8 @@ class WebCrawler:
 
         # Initialize LLM extraction strategy with OpenRouter
         self.llm_strategy = LLMExtractionStrategy(
-            provider=os.getenv("OPENROUTER_MODEL", "deepseek-ai/deepseek-r1"),
+            provider="openrouter",
+            model=os.getenv("OPENROUTER_MODEL", "deepseek-ai/deepseek-r1"),
             api_token=os.getenv("OPENROUTER_API_KEY"),
             extraction_type="schema",
             chunk_token_threshold=4096,
@@ -195,14 +196,15 @@ class WebCrawler:
 
         return clean_text(html_content)
 
-    async def crawl(self, url: str, output_file: str, user_prompt: str = None) -> None:
+    async def crawl(self, url: str, output_file: str, user_prompt: str = None, retry_count: int = 0) -> None:
         """Crawl the website and save content to markdown file."""
-        # Create research directory if needed
+        # Generate filename based on URL structure
+        parsed_url = urlparse(url)
+        domain_parts = parsed_url.netloc.split('.')
+        path_parts = parsed_url.path.strip('/').split('/')
+        filename = f"{domain_parts[-2] if len(domain_parts) > 1 else domain_parts[0]}_{path_parts[-1] if path_parts else 'index'}.md"
+        output_file = os.path.join('research', filename)
         os.makedirs('research', exist_ok=True)
-        
-        if not output_file.endswith('.md'):
-            output_file += '.md'
-        output_file = os.path.join('research', output_file)
 
         # Remove any fragment identifier from the URL
         url, _ = urldefrag(url)
@@ -212,9 +214,13 @@ class WebCrawler:
         all_content = []
         processed_urls = set()
 
-        # Validate URL format
+        # Validate URL format up front
         if not re.match(r'^https?://(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&//=]*)$', url):
             raise ValueError(f"Invalid URL format: {url}")
+
+        # Validate API key
+        if not os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENROUTER_API_KEY", "").startswith("sk-or-"):
+            raise ValueError("Missing or invalid OPENROUTER_API_KEY in .env file")
             
         # Validate prompt or set default behavior
             print("\nWarning: No valid prompt provided. Extracting all content from landing page...")
@@ -285,7 +291,16 @@ class WebCrawler:
                         
                         if result.success and hasattr(result, "html"):
                             # Extract content using LLM with relevance scoring
-                            extracted = json.loads(result.extracted_content)
+                            try:
+                                extracted = json.loads(result.extracted_content)
+                            except json.JSONDecodeError as e:
+                                print(f"Failed to parse LLM response: {str(e)}")
+                                if retry_count < 3:
+                                    print(f"Retrying... ({retry_count + 1}/3)")
+                                    return await self.crawl(url, output_file, user_prompt, retry_count + 1)
+                                else:
+                                    print("Maximum retries exceeded. Falling back to full page scrape.")
+                                    extracted = [{"content": self.clean_content(result.html, base_url), "relevance_score": 1.0, "source_url": link_url}]
                             for item in extracted:
                                 content_item = ExtractedContent(**item)
                                 if content_item.relevance_score >= 0.5:  # Threshold
@@ -350,11 +365,11 @@ async def main():
     print("\nWeb Content Crawler")
     print("==================")
     
-    url = input("\nEnter URL: ")
-    filename = input("Enter filename for output (extension optional): ")
+    url = input("\nEnter URL: ").strip()
+    user_prompt = input("Enter research prompt (or leave empty for full extraction): ").strip()
 
     crawler = WebCrawler(verbose=True)
-    await crawler.crawl(url, filename)
+    await crawler.crawl(url, "", user_prompt if len(user_prompt) > 10 else None)
 
 if __name__ == "__main__":
     asyncio.run(main())
