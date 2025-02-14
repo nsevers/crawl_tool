@@ -128,9 +128,10 @@ class WebCrawler:
         all_content = []
         processed_urls = set()
 
-        # Validate URL format up front
-        if not re.match(r'^https?://(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&//=]*)$', url):
-            raise ValueError(f"Invalid URL format: {url}")
+        # Validate URL format up front (more flexible pattern)
+        url_pattern = r'^https?://(?:www\.)?[\w-]+\.[\w.]+(?:/[\w-\./?&=#%+]*)?$'
+        if not re.match(url_pattern, url, re.IGNORECASE):
+            raise ValueError(f"Invalid URL format: {url}\nPlease ensure it starts with http:// or https:// and has a valid domain structure")
 
         # Validate prompt or set default behavior
             print("\nWarning: No valid prompt provided. Extracting all content from landing page...")
