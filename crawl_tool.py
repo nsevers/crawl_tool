@@ -17,6 +17,10 @@ class ExtractedContent(BaseModel):
 
 class WebCrawler:
     def __init__(self, verbose: bool = True):
+        # Verify OpenRouter API key
+        if not os.getenv("OPENROUTER_API_KEY"):
+            raise ValueError("OPENROUTER_API_KEY must be set in environment variables")
+
         # Initialize LLM extraction strategy with OpenRouter
         self.llm_strategy = LLMExtractionStrategy(
             provider="openrouter/google-palm",  # Default model

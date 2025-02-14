@@ -26,8 +26,9 @@ Ease of Use
 3. Output filename - Content will be saved in markdown format
 4. The AI will:
    - Crawl only within the starting URL's folder structure
-   - Extract content relevant to the prompt
-   - Structure the output with source URLs and relevance scores
+   - Use AI (via OpenRouter) to filter content based on relevance
+   - Structure output with source URLs and 0-1 relevance scores  
+   - Default to full extraction if no prompt provided
    
 Keep logs or verbose output so users can track the crawler’s progress.
 
