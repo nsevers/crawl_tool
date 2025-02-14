@@ -17,9 +17,13 @@ class ExtractedContent(BaseModel):
 
 class WebCrawler:
     def __init__(self, verbose: bool = True):
-        # Verify OpenRouter API key
-        if not os.getenv("OPENROUTER_API_KEY"):
-            raise ValueError("OPENROUTER_API_KEY must be set in environment variables")
+        # Verify OpenRouter API key (check for placeholder value)
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        if not api_key or api_key.startswith("sk-or-your-key-here"):
+            raise ValueError(
+                "Missing or invalid OPENROUTER_API_KEY in .env file\n"
+                "Get your key from https://openrouter.ai/keys and update .env from .env.template"
+            )
 
         # Initialize LLM extraction strategy with OpenRouter
         self.llm_strategy = LLMExtractionStrategy(
