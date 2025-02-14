@@ -112,6 +112,16 @@ class WebCrawler:
 
     async def crawl(self, url: str, output_file: str, user_prompt: str = None, retry_count: int = 0) -> None:
         """Crawl the website and save content to markdown file."""
+        if not url:
+            raise ValueError("URL cannot be empty")
+            
+        # Store original URL for later use
+        original_url = url
+        
+        # Remove any fragment identifier from the URL first
+        url, _ = urldefrag(url)
+        base_url = url
+        
         # Generate filename based on URL structure
         parsed_url = urlparse(url)
         domain_parts = parsed_url.netloc.split('.')
@@ -119,10 +129,6 @@ class WebCrawler:
         filename = f"{domain_parts[-2] if len(domain_parts) > 1 else domain_parts[0]}_{path_parts[-1] if path_parts else 'index'}.md"
         output_file = os.path.join('research', filename)
         os.makedirs('research', exist_ok=True)
-
-        # Remove any fragment identifier from the URL
-        url, _ = urldefrag(url)
-        base_url = url
         
         # Track all content
         all_content = []
@@ -298,9 +304,14 @@ async def main():
         
     user_prompt = input("Enter research prompt (or leave empty for full extraction): ").strip()
 
-    print(f"\nStarting crawl of: {url}")
+    print(f"\nStarting crawl of: {url!r}")  # Debug - show exact URL including quotes
     crawler = WebCrawler(verbose=True)
-    await crawler.crawl(url, "", user_prompt if len(user_prompt) > 10 else None)
+    try:
+        await crawler.crawl(url, "", user_prompt if len(user_prompt) > 10 else None)
+    except ValueError as e:
+        print(f"Error: {e}")
+        print(f"Attempted URL: {url!r}")  # Debug - show exact URL that caused error
+        raise
 
 # Load environment variables first thing
 load_dotenv()
