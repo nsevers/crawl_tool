@@ -19,23 +19,28 @@ class WebCrawler:
     def __init__(self, verbose: bool = True):
         # Verify OpenRouter API key (check for placeholder value)
         api_key = os.getenv("OPENROUTER_API_KEY")
-        if not api_key or api_key == "sk-or-your-key-here":
+        if api_key == "sk-or-your-key-here" or not api_key:
             raise ValueError(
                 "Missing or invalid OPENROUTER_API_KEY in .env file\n"
                 "1. Get your key from https://openrouter.ai/keys\n"
-                "2. Copy .env.template to .env\n"
-                "3. Replace the placeholder key with your actual key"
+                "2. Update .env file with your actual key"
             )
 
-        # Initialize LLM extraction strategy with OpenRouter
+        # Initialize LLM extraction strategy with OpenRouter per LiteLLM docs
         self.llm_strategy = LLMExtractionStrategy(
-            provider="openrouter",
-            model=os.getenv("OPENROUTER_MODEL", "deepseek-ai/deepseek-r1"),
+            provider="openrouter",  # Must be exactly "openrouter"
+            model=os.getenv("OPENROUTER_MODEL", "openrouter/auto"),  # Use openrouter/ prefix
             api_token=os.getenv("OPENROUTER_API_KEY"),
             extraction_type="schema",
             chunk_token_threshold=4096,
             base_url="https://openrouter.ai/api/v1",
-            extra_args={"headers": {"HTTP-Referer": "https://github.com/your-repo"}},
+            extra_args={
+                "headers": {
+                    "HTTP-Referer": "https://github.com/your-repo",  # Required by OpenRouter
+                    "X-Title": "Crawl4AI Research Tool"  # Identify your project
+                },
+                "temperature": 0.3  # Add sampling parameters
+            },
             verbose=verbose
         )
         
