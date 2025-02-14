@@ -22,8 +22,12 @@ Integrate with Crawl4AI’s advanced features (JavaScript injection, waiting for
 
 Ease of Use
 1. Input a URL
-2. Input prompt
-3. Then let the AI handle the entire scraping process. The AI will chose a suitable filename for the markdown file.
+2. Input prompt - The AI will use this to determine relevance of content
+3. Output filename - Content will be saved in markdown format
+4. The AI will:
+   - Crawl only within the starting URL's folder structure
+   - Extract content relevant to the prompt
+   - Structure the output with source URLs and relevance scores
    
 Keep logs or verbose output so users can track the crawler’s progress.
 

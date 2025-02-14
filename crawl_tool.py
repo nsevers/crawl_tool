@@ -4,10 +4,23 @@ from urllib.parse import urljoin, urlparse, urldefrag
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 from crawl4ai.content_filter_strategy import PruningContentFilter
+from crawl4ai.extraction_strategy import LLMExtractionStrategy
+from pydantic import BaseModel, Field
+from typing import List
+import os
 from typing import List, Optional, Set, Dict
 
 class WebCrawler:
     def __init__(self, verbose: bool = True):
+        # Initialize LLM extraction strategy
+        self.llm_strategy = LLMExtractionStrategy(
+            provider="openai/gpt-4o",
+            api_token=os.getenv("OPENAI_API_KEY"),
+            extraction_type="schema",
+            chunk_token_threshold=4096,
+            verbose=verbose
+        )
+        
         self.browser_config = BrowserConfig(
             browser_type="chromium",
             headless=True,
@@ -39,15 +52,17 @@ class WebCrawler:
         return "css:body"
 
     def _create_link_filter(self, base_url: str) -> callable:
-        """Creates a link filter that keeps us within the same domain and path depth."""
+        """Creates a link filter constrained to the highest folder level."""
         parsed_base = urlparse(base_url)
-        
-        # For docs.rs, get the module path parts
         path_parts = parsed_base.path.strip('/').split('/')
-        if len(path_parts) >= 3:  # domain/crate/version/...
-            base_path = '/'.join(path_parts[:3])  # Keep crate and version level
+        
+        # Maintain structure up to last folder of base URL
+        if len(path_parts) > 0 and '.' in path_parts[-1]:  # If has file extension
+            base_depth = max(len(path_parts) - 1, 1)
         else:
-            base_path = '/'.join(path_parts)
+            base_depth = len(path_parts)
+            
+        base_path = '/'.join(path_parts[:base_depth]) if base_depth > 0 else ''
         
         def link_filter(link: str) -> bool:
             # Remove anchor from URL
@@ -169,7 +184,7 @@ class WebCrawler:
 
         return clean_text(html_content)
 
-    async def crawl(self, url: str, output_file: str) -> None:
+    async def crawl(self, url: str, output_file: str, user_prompt: str) -> None:
         """Crawl the website and save content to markdown file."""
         if not output_file.endswith('.md'):
             output_file += '.md'
