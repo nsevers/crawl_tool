@@ -226,8 +226,11 @@ class WebCrawler:
                     )
                 else:
                     link_summary = "No recommended links found."
-                header = (f"# Landing Page Analysis\nURL: {url}\nMain Topic: {main_topic}\n\n"
+                header = (f"# Landing Page Analysis\nURL: {url}\n"
+                          f"### Research Prompt: {user_prompt}\n\n"
+                          f"Main Topic: {main_topic}\n"
                           f"### Recommended Links Summary\n{link_summary}\n\n")
+                
                 
                 all_content.append(header + content)
                 self.processed_urls.add(url)
