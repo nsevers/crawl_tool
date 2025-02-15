@@ -237,21 +237,6 @@ class WebCrawler:
                         print(f"Error: {initial_result.error_message}")
                     return
 
-                # Process landing page content
-                if hasattr(initial_result, "html"):
-                    # Use full markdown content from landing page
-                    content = initial_result.markdown_v2.raw_markdown
-                    if not content:
-                        content = initial_result.html  # Fallback to raw HTML if markdown empty
-                    if content:
-                        print(f"\n✓ Successfully processed landing page: {url}")
-                        # Get main_topic from validated content if available
-                        main_topic = ""
-                        if 'validated_items' in locals() and validated_items:
-                            main_topic = getattr(validated_items[0], 'main_topic', '')
-                        header = f"# Landing Page Analysis\n**URL:** {url}\n**Main Topic:** {main_topic}\n\n"
-                        all_content.append(header + content + "\n")
-                        processed_urls.add(url)
 
                 # Process only LLM-recommended URLs from initial analysis
                 try:
