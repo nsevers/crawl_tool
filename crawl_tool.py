@@ -29,7 +29,7 @@ class WebCrawler:
 
         # Initialize LLM extraction strategy with OpenRouter 
         self.llm_strategy = LLMExtractionStrategy(
-            provider=f"openrouter/{os.getenv('OPENROUTER_MODEL', 'meta-llama/llama-3-70b-instruct')}",
+            provider=f"openrouter/{os.getenv('OPENROUTER_MODEL', 'anthropic/claude-2-haiku')}",
             api_token=api_key,
             extraction_type="schema",
             schema=ExtractedContent.model_json_schema(),
