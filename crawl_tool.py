@@ -29,12 +29,12 @@ class WebCrawler:
 
         # Initialize LLM extraction strategy with OpenRouter 
         self.llm_strategy = LLMExtractionStrategy(
-            provider=f"openrouter/{os.getenv('OPENROUTER_MODEL', 'anthropic/claude-2-haiku')}",
+            provider=f"openrouter/{os.getenv('OPENROUTER_MODEL', 'openrouter/deepseek/deepseek-r1')}",
             api_token=api_key,
             extraction_type="schema",
             schema=ExtractedContent.model_json_schema(),
             instruction=(
-                "Analyze the landing page and identify relevant URLs for documentation research. "
+                "Analyze the landing page and identify relevant URLs for documentation research. Be discriminating, only follow URL's that are directly related to the main topic and will be useful. We need to ensure our research is focused and relevant."
                 "Return JSON with: 1) relevant_urls 2) brief relevance_reasons 3) main_topic. "
                 "Only include URLs within the same documentation section/subfolder."
             ),
@@ -45,7 +45,7 @@ class WebCrawler:
                     "X-Title": "Crawl4AI Research Tool",
                     "Content-Type": "application/json",
                     "HTTP-Referer": "https://github.com/your-project",
-                    "X-Title": "Anchor IDL Documentation Extraction",
+                    "X-Title": "Smart Documentation Extraction",
                     "X-API-Key": os.getenv("OPENROUTER_API_KEY")
                 },
                 "temperature": 0.3,
@@ -313,9 +313,6 @@ class WebCrawler:
             return
 
 async def main():
-    print("\nWeb Content Crawler")
-    print("==================")
-    
     url = input("\nEnter URL: ").strip()
     if not url:
         raise ValueError("URL cannot be empty")
