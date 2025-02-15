@@ -252,18 +252,38 @@ class WebCrawler:
                 content_data = initial_result.extracted_content
                 error_message = None
                 
-                # Robust content data handling for different response formats
+                # Comprehensive response data handling and normalization
                 try:
-                    # Check if we have a method/function instead of raw data
+                    # First check if content_data is callable (like response.json)
                     if callable(content_data):
                         content_data = content_data()
+                    
+                    # If it's a response-like object with text attribute (e.g., HTTP response)
+                    if hasattr(content_data, 'text'):
+                        raw_text = content_data.text
+                        try:
+                            # Attempt to parse JSON from text
+                            content_data = json.loads(raw_text)
+                        except json.JSONDecodeError:
+                            # If not JSON, keep raw text
+                            content_data = raw_text
+                    
+                    # Recursively handle nested JSON strings
+                    if isinstance(content_data, str):
+                        try:
+                            parsed = json.loads(content_data)
+                            content_data = parsed
+                        except json.JSONDecodeError:
+                            pass  # Leave as string if not valid JSON
+                    
+                    # Force serialization for any remaining non-serializable types
+                    try:
+                        json.dumps(content_data)
+                    except TypeError:
+                        content_data = str(content_data)
                 except Exception as e:
-                    print(f"Error converting response data: {str(e)}")
-                    content_data = f"Error decoding response: {str(e)}"
-                
-                # Force serialization for non-basic types
-                if not isinstance(content_data, (str, dict, list, int, float, bool)):
-                    content_data = str(content_data)
+                    print(f"Error processing response data: {str(e)}")
+                    content_data = {"error": f"Failed to process response data: {str(e)}"}
 
                 # Handle error responses from LLM
                 error_message = None
