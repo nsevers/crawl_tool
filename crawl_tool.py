@@ -30,12 +30,20 @@ class ExtractedContent(BaseModel):
 class WebCrawler:
     def __init__(self, verbose: bool = True):
         self.total_cost = 0.0
-        api_key = os.getenv("OPENROUTER_API_KEY")
-        if not api_key or not api_key.startswith("sk-or-"):
-            raise ValueError(
-                "Invalid OpenRouter API key format.\n"
-                "Ensure you update the .env file with a valid key starting with 'sk-or-'."
-            )
+        openai_key = os.getenv("OPENAI_API_KEY")
+        anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+        openrouter_key = os.getenv("OPENROUTER_API_KEY")
+        
+        keys = {"openai": openai_key, "anthropic": anthropic_key, "openrouter": openrouter_key}
+        active_keys = {k: v for k, v in keys.items() if v and v.strip()}
+        
+        if len(active_keys) > 1:
+            raise ValueError(f"Multiple LLM keys set in environment: {active_keys}. Please only set one.")
+        elif len(active_keys) == 0:
+            raise ValueError("No LLM key set in environment. Please set one of OPENAI_API_KEY, ANTHROPIC_API_KEY, or OPENROUTER_API_KEY.")
+        else:
+            provider_name, api_key = next(iter(active_keys.items()))
+        
         # Prepare extra_args WITHOUT any callbacks (to ensure JSON serializability)
         extra_args = {
             "headers": {
@@ -51,7 +59,11 @@ class WebCrawler:
         }
         # Initialize the LLM extraction strategy (its instruction will be updated later if a prompt is provided)
         self.llm_strategy = LLMExtractionStrategy(
-            provider=os.getenv("OPENROUTER_MODEL", "openrouter/deepseek/deepseek-r1"),
+            provider=(
+                os.getenv("OPENAI_MODEL", "openai/gpt-3.5-turbo") if provider_name == "openai"
+                else os.getenv("ANTHROPIC_MODEL", "anthropic/claude-v2") if provider_name == "anthropic"
+                else os.getenv("OPENROUTER_MODEL", "openrouter/deepseek/deepseek-r1")
+            ),
             api_token=api_key,
             extraction_type="schema",
             schema=ExtractedContent.model_json_schema(),
