@@ -1,4 +1,5 @@
 import asyncio
+import json
 import re
 from urllib.parse import urljoin, urlparse, urldefrag
 from dotenv import load_dotenv
@@ -208,7 +209,28 @@ class WebCrawler:
                         processed_urls.add(url)
 
                 # Process only LLM-recommended URLs from initial analysis
-                content_item = ExtractedContent.parse_obj(initial_result.extracted_content)
+                # Parse list of extracted content items and validate each one
+                extracted_items = initial_result.extracted_content
+                if not isinstance(extracted_items, list):
+                    extracted_items = [extracted_items]
+                
+                validated_items = []
+                for item in extracted_items:
+                    if isinstance(item, str):
+                        try:
+                            item = json.loads(item)
+                        except json.JSONDecodeError as e:
+                            print(f"Invalid JSON in extracted content: {e}")
+                            continue
+                    try:
+                        validated_items.append(ExtractedContent.model_validate(item))
+                    except Exception as e:
+                        print(f"Validation error in extracted content: {e}")
+                
+                if not validated_items:
+                    raise ValueError("No valid extracted content found")
+                
+                content_item = validated_items[0]
                 print(f"LLM identified {len(content_item.relevant_urls)} relevant URLs")
                 urls_to_process = set()
                 
