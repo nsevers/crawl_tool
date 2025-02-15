@@ -235,7 +235,9 @@ class WebCrawler:
 
             for rec_url in content_item.relevant_urls:
                 clean_url = urljoin(base_url, rec_url)
+                # Remove any fragment identifiers from the URL.
                 clean_url, _ = urldefrag(clean_url)
+                # Remove any stray angle brackets.
                 clean_url = clean_url.replace('<', '').replace('>', '')
                 if clean_url not in self.processed_urls and link_filter(clean_url):
                     urls_to_process.add(clean_url)
@@ -248,6 +250,9 @@ class WebCrawler:
                         content = (result.markdown_v2.raw_markdown
                                    if hasattr(result, "markdown_v2") and result.markdown_v2.raw_markdown
                                    else result.html)
+                        # Remove markdown link URLs while keeping the link text, and remove stray angle-bracketed substrings.
+                        content = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', content)
+                        content = re.sub(r'<[^>]+>', '', content)
                         page_header = f"## Page Content\nURL: {link_url}\n\n"
                         all_content.append(page_header + content)
                         self.processed_urls.add(link_url)
