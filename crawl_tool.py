@@ -250,10 +250,10 @@ class WebCrawler:
 
             for rec_url in content_item.relevant_urls:
                 clean_url = urljoin(base_url, rec_url)
-                # Remove any fragment identifiers from the URL.
+                # Remove any fragment identifier (anchor)
                 clean_url, _ = urldefrag(clean_url)
-                # Remove any stray angle brackets.
-                clean_url = clean_url.replace('<', '').replace('>', '')
+                # Remove any stray angle-bracketed substrings
+                clean_url = re.sub(r'<[^>]*>', '', clean_url)
                 if clean_url not in self.processed_urls and link_filter(clean_url):
                     urls_to_process.add(clean_url)
 
@@ -265,8 +265,15 @@ class WebCrawler:
                         content = (result.markdown_v2.raw_markdown
                                    if hasattr(result, "markdown_v2") and result.markdown_v2.raw_markdown
                                    else result.html)
-                        # Remove markdown link URLs while keeping the link text, and remove stray angle-bracketed substrings.
-                        content = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', content)
+                        # Remove markdown links: keep the link text and, if present, append the tooltip in parentheses.
+                        def replace_md_link(match):
+                            link_text = match.group(1)
+                            tooltip = match.group(3)
+                            if tooltip:
+                                return f"{link_text} (tooltip: {tooltip})"
+                            return link_text
+                        content = re.sub(r'\[([^\]]+)\]\(([^)]+)(?:\s+"([^"]+)")?\)', replace_md_link, content)
+                        # Remove any stray angle-bracketed substrings.
                         content = re.sub(r'<[^>]+>', '', content)
                         page_header = f"## Page Content\nURL: {link_url}\n\n"
                         all_content.append(page_header + content)
@@ -274,6 +281,7 @@ class WebCrawler:
                         print(f"Processed: {link_url}")
                     else:
                         print(f"Failed to process: {link_url}")
+                    
                 except Exception as e:
                     print(f"Error processing {link_url}: {str(e)}")
 
