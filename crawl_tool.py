@@ -250,7 +250,6 @@ class WebCrawler:
                         if result.success and hasattr(result, "html"):
                             # Extract content using LLM with relevance scoring
                             try:
-                                import json  # Add missing import
                                 extracted = json.loads(result.extracted_content)
                                 # Validate we got the expected fields
                                 # Validate and filter responses
