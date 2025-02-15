@@ -275,9 +275,21 @@ class WebCrawler:
                             if tooltip:
                                 return f"{link_text} (tooltip: {tooltip})"
                             return link_text
-                        content = re.sub(r'\[([^\]]+)\]\(([^)]+)(?:\s+"([^"]+)")?\)', replace_md_link, content)
-                        # Remove any stray angle-bracketed substrings.
+                        # Transform standard markdown links to show text with tooltip (if available)
+                        content = re.sub(
+                            r'\[([^\]]+)\]\(([^)]+)(?:\s+"([^"]+)")?\)',
+                            lambda m: f"{m.group(1)} (tooltip: {m.group(3)})" if m.group(3) else m.group(1),
+                            content
+                        )
+                        # Transform token-like patterns such as String[](...) 
+                        content = re.sub(
+                            r'(\w+\[\])\(([^)]+)(?:\s+"([^"]+)")?\)',
+                            lambda m: f"{m.group(1)} (tooltip: {m.group(3)})" if m.group(3) else m.group(1),
+                            content
+                        )
+                        # Remove any stray angle-bracketed substrings
                         content = re.sub(r'<[^>]+>', '', content)
+                        
                         page_header = f"## Page Content\nURL: {link_url}\n\n"
                         all_content.append(page_header + content)
                         self.processed_urls.add(link_url)
