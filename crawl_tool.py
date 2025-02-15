@@ -13,9 +13,18 @@ import os
 import litellm
 
 class ExtractedContent(BaseModel):
-    relevant_urls: List[str] = Field(..., description="List of URLs relevant to the research prompt")
-    relevance_reasons: List[str] = Field(..., description="Brief reason for each URL's relevance")
-    main_topic: str = Field(..., description="Primary topic identified from landing page")
+    relevant_urls: List[str] = Field(
+        default_factory=list,
+        description="List of URLs relevant to the research prompt"
+    )
+    relevance_reasons: List[str] = Field(
+        default_factory=list,
+        description="Brief reason for each URL's relevance"
+    )
+    main_topic: str = Field(
+        default="Unknown topic - LLM failed to identify main theme",
+        description="Primary topic identified from landing page"
+    )
 
 class WebCrawler:
     def __init__(self, verbose: bool = True):
@@ -239,30 +248,44 @@ class WebCrawler:
 
 
                 # Process only LLM-recommended URLs from initial analysis
-                try:
-                    # Parse and validate the extracted content structure
-                    if isinstance(initial_result.extracted_content, str):
-                        content_data = json.loads(initial_result.extracted_content)
-                    else:
-                        content_data = initial_result.extracted_content
+                validated_items = []
+                content_data = initial_result.extracted_content
+                error_message = None
 
-                    # Handle case where response is wrapped in a list
-                    if isinstance(content_data, list) and len(content_data) > 0:
-                        content_data = content_data[0]
+                # Handle error responses from LLM
+                if isinstance(content_data, dict) and content_data.get('error'):
+                    error_message = content_data.get('content', 'LLM API Error')
+                elif isinstance(content_data, str) and 'APIError' in content_data:
+                    error_message = content_data.split('content":')[1].strip('"') if 'content"' in content_data else content_data
+
+                # If we have an error message, create fallback content
+                if error_message:
+                    print(f"LLM API Error: {error_message}")
+                    validated_items = [ExtractedContent(
+                        relevant_urls=[url],
+                        relevance_reasons=["Fallback to page content due to LLM error"],
+                        main_topic=error_message
+                    )]
+                else:
+                    # Try to parse valid response
+                    try:
+                        if isinstance(content_data, str):
+                            content_data = json.loads(content_data)
                         
-                    content_item = ExtractedContent.model_validate(content_data)
-                    validated_items = [content_item]
-                except json.JSONDecodeError as e:
-                    print(f"Invalid JSON format in extracted content: {e}")
-                    print(f"Raw content: {initial_result.extracted_content[:300]}...")
-                    validated_items = []
-                except Exception as e:
-                    print(f"Validation error in extracted content: {str(e)}")
-                    print(f"Content that failed validation: {json.dumps(content_data, indent=2)[:300]}...")
-                    validated_items = []
-                
+                        if isinstance(content_data, list) and len(content_data) > 0:
+                            content_data = content_data[0]
+
+                        validated_items = [ExtractedContent.model_validate(content_data)]
+                    except (json.JSONDecodeError, KeyError, ValueError) as e:
+                        print(f"Content parsing failed: {str(e)}")
+                        validated_items = [ExtractedContent(
+                            relevant_urls=[url],
+                            relevance_reasons=["Fallback to page content due to parsing error"],
+                            main_topic=f"Content extraction error: {str(e)}"
+                        )]
+
                 if not validated_items:
-                    raise ValueError("No valid extracted content found")
+                    raise ValueError("Critical failure - no content could be extracted")
 
                 # Process landing page content after validation
                 if hasattr(initial_result, "html"):
