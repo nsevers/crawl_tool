@@ -198,8 +198,10 @@ class WebCrawler:
 
                 # Process landing page content
                 if hasattr(initial_result, "html"):
-                    # Use crawl4ai's cleaned markdown output directly
+                    # Use full markdown content from landing page
                     content = initial_result.markdown_v2.raw_markdown
+                    if not content:
+                        content = initial_result.html  # Fallback to raw HTML if markdown empty
                     if content:
                         print(f"\n✓ Successfully processed landing page: {url}")
                         all_content.append(f"# Documentation from {url}\n\n{content}\n")
@@ -244,15 +246,8 @@ class WebCrawler:
                                 
                             except (json.JSONDecodeError, ValueError, KeyError) as e:
                                 print(f"Failed to parse LLM response: {str(e)}")
-                                if retry_count < 2:
-                                    print(f"Retrying with simpler config... ({retry_count + 1}/2)")
-                                    # Simplify config for retry with more reliable model
-                                    self.llm_strategy.provider = "openrouter/meta-llama/llama-3-70b-instruct"
-                                    self.llm_strategy.instruction = "Extract technical documentation with source URLs"  # Simpler instruction
-                                    return await self.crawl(url, output_file, user_prompt, retry_count + 1)
-                                else:
-                                    print(f"Maximum retries exceeded. Aborting crawl. Error: {str(e)}")
-                                    raise  # Re-raise the error to exit
+                                print(f"Aborting crawl due to extraction error: {str(e)}")
+                                raise RuntimeError(f"Content extraction failed: {str(e)}") from e
                             # Process LLM response with URL recommendations
                             content_item = ExtractedContent(**extracted[0])
                             print(f"LLM identified {len(content_item.relevant_urls)} relevant URLs")
