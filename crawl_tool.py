@@ -42,31 +42,34 @@ class WebCrawler:
         # Track LLM costs
         self.total_cost = 0.0
         
-        # Initialize LLM extraction strategy with OpenRouter (only for landing page)
+        # Prepare extra_args without the callback
+        extra_args = {
+            "headers": {
+                "HTTP-Referer": "https://github.com/your-project",
+                "X-Title": "Smart Documentation Extraction",
+                "Content-Type": "application/json",
+                "X-API-Key": os.getenv("OPENROUTER_API_KEY")
+            },
+            "temperature": 0.3,
+            "top_p": float(os.getenv("TOP_P", "0.9")),
+            "response_format": {"type": "json_object"},
+            "max_tokens": int(os.getenv("MAX_TOKENS", "32000"))
+        }
+        
+        # Initialize the LLM extraction strategy without passing a callback
         self.llm_strategy = LLMExtractionStrategy(
-            provider=f"{os.getenv('OPENROUTER_MODEL', 'openrouter/deepseek/deepseek-r1')}",
+            provider=os.getenv("OPENROUTER_MODEL", "openrouter/deepseek/deepseek-r1"),
             api_token=api_key,
             extraction_type="schema",
             schema=ExtractedContent.model_json_schema(),
             instruction=(
-                "Analyze the landing page and identify relevant URLs for documentation research. Be discriminating, only follow URL's that are directly related to the main topic and will be useful. We need to ensure our research is focused and relevant."
+                "Analyze the landing page and identify relevant URLs for documentation research. "
+                "Be discriminating, only follow URL's that are directly related to the main topic and will be useful. "
                 "Return JSON with: 1) relevant_urls 2) brief relevance_reasons 3) main_topic. "
                 "Only include URLs within the same documentation section/subfolder."
             ),
             api_base="https://openrouter.ai/api/v1",
-            extra_args={
-                "litellm_callbacks": [self._track_llm_cost],
-                "headers": {
-                    "HTTP-Referer": "https://github.com/your-project",
-                    "X-Title": "Smart Documentation Extraction",
-                    "Content-Type": "application/json",
-                    "X-API-Key": os.getenv("OPENROUTER_API_KEY")
-                },
-                "temperature": 0.3,
-                "top_p": float(os.getenv("TOP_P", "0.9")),
-                "response_format": {"type": "json_object"},
-                "max_tokens": int(os.getenv("MAX_TOKENS", "32000")) 
-            },
+            extra_args=extra_args,
             verbose=verbose
         )
         
@@ -240,90 +243,49 @@ class WebCrawler:
                     run_config.wait_for = None
                     initial_result = await crawler.arun(url=url, config=run_config)
 
+                if initial_result.success:
+                    # Use the returned payload from the LLM as needed…
+                    # Now manually track the cost using the response
+                    try:
+                        cost = litellm.completion_cost(completion_response=initial_result.completion_response)
+                        self.total_cost += cost
+                        print(f"\nLLM API Call Cost: ${cost:.6f} | Total: ${self.total_cost:.6f}")
+                    except Exception as e:
+                        print(f"Error tracking LLM cost: {str(e)}")
+
                 if not initial_result.success:
                     print(f"\n✗ Failed to process landing page: {url}")
                     if hasattr(initial_result, 'error_message'):
                         print(f"Error: {initial_result.error_message}")
                     return
 
-
                 # Process only LLM-recommended URLs from initial analysis
                 validated_items = []
                 content_data = initial_result.extracted_content
                 error_message = None
                 
-                # Comprehensive response data handling and normalization
-                try:
-                    # First check if content_data is callable (like response.json)
-                    if callable(content_data):
-                        content_data = content_data()
-                    
-                    # If it's a response-like object with text attribute (e.g., HTTP response)
-                    if hasattr(content_data, 'text'):
-                        raw_text = content_data.text
-                        try:
-                            # Attempt to parse JSON from text
-                            content_data = json.loads(raw_text)
-                        except json.JSONDecodeError:
-                            # If not JSON, keep raw text
-                            content_data = raw_text
-                    
-                    # Recursively handle nested JSON strings
-                    if isinstance(content_data, str):
-                        try:
-                            parsed = json.loads(content_data)
-                            content_data = parsed
-                        except json.JSONDecodeError:
-                            pass  # Leave as string if not valid JSON
-                    
-                    # Force serialization for any remaining non-serializable types
+                # Fix for JSON serialization issue
+                import inspect  # Add missing import
+                if inspect.ismethod(content_data):
                     try:
-                        json.dumps(content_data)
-                    except TypeError:
+                        content_data = content_data()
+                    except Exception as e:
+                        print(f"Error calling JSON method: {str(e)}")
                         content_data = str(content_data)
-                except Exception as e:
-                    print(f"Error processing response data: {str(e)}")
-                    content_data = {"error": f"Failed to process response data: {str(e)}"}
 
                 # Handle error responses from LLM
-                error_message = None
-                
-                # Handle list-type errors with better logging
-                error_message = None
-                if isinstance(content_data, list):
-                    error_messages = []
-                    for item in content_data:
-                        if isinstance(item, dict):
-                            message = item.get('content') or \
-                                     item.get('error', {}).get('message') or \
-                                     item.get('error', 'Unknown list error')
-                            error_messages.append(f"List item error: {message}")
-                    if error_messages:
-                        error_message = "\n".join(error_messages[:3])  # Show first 3 errors only
-                
-                # Handle dict-type errors with better message extraction        
-                elif isinstance(content_data, dict):
-                    error_message = content_data.get('content') or \
-                        content_data.get('error', {}).get('message') or \
-                        content_data.get('error', 'Unknown dict error')
-                # Handle raw response objects
-                elif hasattr(content_data, 'text'):
+                error_data = {}
+                if isinstance(content_data, dict) and 'error' in content_data:
+                    error_data = content_data
+                    error_message = content_data.get('content', 'LLM API Error')
+                elif hasattr(content_data, 'text'):  # Handle response objects
                     try:
                         error_data = json.loads(content_data.text)
-                        if isinstance(error_data, list):
-                            error_message = error_data[0].get('content', 'LLM API Error')
-                        else:
-                            error_message = error_data.get('content', 
-                                error_data.get('error', {}).get('message', 'LLM API Error'))
+                        error_message = error_data.get('error', {}).get('message', 'LLM API Error')
                     except:
                         error_message = str(content_data.text)
-                # Handle string errors        
                 elif isinstance(content_data, str):
                     error_message = content_data
-                
-                # Clean up error message formatting
-                if error_message:
-                    error_message = error_message.strip('[]"')  # Remove JSON array brackets and quotes
 
                 # If we have an error message, create fallback content
                 if error_message:
