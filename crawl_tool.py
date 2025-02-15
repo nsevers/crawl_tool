@@ -98,10 +98,13 @@ class WebCrawler:
         os.makedirs('research', exist_ok=True)
 
         # --- Validate prompt or set default ---
+        default_prompt = os.getenv(
+            "DEFAULT_RESEARCH_PROMPT",
+            "Extract all meaningful content from the page, focusing on technical documentation, API references, and developer guides."
+        )
         if not user_prompt or len(user_prompt) < 10:
-            print("\nWarning: No valid prompt provided. Extracting all meaningful content from landing page...")
-            user_prompt = ("Extract all meaningful content from the page, focusing on technical documentation, "
-                           "API references, and developer guides.")
+            print("\nWarning: No valid prompt provided. Using default prompt from .env.")
+            user_prompt = default_prompt
         else:
             print("Using provided research prompt.")
 
@@ -277,5 +280,10 @@ class WebCrawler:
 if __name__ == "__main__":
     load_dotenv()
     url = input("Enter URL: ").strip()
-    research_prompt = input("Enter research prompt (or leave empty): ").strip() or None
-    asyncio.run(WebCrawler(verbose=True).crawl(url, research_prompt))
+    main_prompt = os.getenv("MAIN_RESEARCH_PROMPT")
+    if main_prompt:
+        prompt = main_prompt
+        print("Using MAIN_RESEARCH_PROMPT from .env")
+    else:
+        prompt = input("Enter research prompt (or leave empty to use default from .env): ").strip() or None
+    asyncio.run(WebCrawler(verbose=True).crawl(url, prompt))
