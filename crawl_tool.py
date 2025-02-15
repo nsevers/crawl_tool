@@ -48,11 +48,9 @@ class WebCrawler:
             extra_args={
                 "litellm_callbacks": [self._track_llm_cost],
                 "headers": {
-                    "HTTP-Referer": "https://github.com/your-repo",
-                    "X-Title": "Crawl4AI Research Tool",
-                    "Content-Type": "application/json",
                     "HTTP-Referer": "https://github.com/your-project",
                     "X-Title": "Smart Documentation Extraction",
+                    "Content-Type": "application/json",
                     "X-API-Key": os.getenv("OPENROUTER_API_KEY")
                 },
                 "temperature": 0.3,
@@ -247,7 +245,11 @@ class WebCrawler:
                         content = initial_result.html  # Fallback to raw HTML if markdown empty
                     if content:
                         print(f"\n✓ Successfully processed landing page: {url}")
-                        header = f"# Landing Page Analysis\n**URL:** {url}\n**Main Topic:** {content_item.main_topic}\n\n"
+                        # Get main_topic from validated content if available
+                        main_topic = ""
+                        if validated_items:
+                            main_topic = validated_items[0].main_topic
+                        header = f"# Landing Page Analysis\n**URL:** {url}\n**Main Topic:** {main_topic}\n\n"
                         all_content.append(header + content + "\n")
                         processed_urls.add(url)
 
