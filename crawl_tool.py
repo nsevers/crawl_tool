@@ -227,7 +227,7 @@ class WebCrawler:
                     initial_result = await crawler.arun(url=url, config=llm_run_config)
                 except Exception as e:
                     print(f"\nRetrying landing page without wait condition...")
-                    run_config = run_config.clone()
+                    run_config = llm_run_config.clone()
                     run_config.wait_for = None
                     initial_result = await crawler.arun(url=url, config=run_config)
 
@@ -247,8 +247,8 @@ class WebCrawler:
                         print(f"\n✓ Successfully processed landing page: {url}")
                         # Get main_topic from validated content if available
                         main_topic = ""
-                        if validated_items:
-                            main_topic = validated_items[0].main_topic
+                        if 'validated_items' in locals() and validated_items:
+                            main_topic = getattr(validated_items[0], 'main_topic', '')
                         header = f"# Landing Page Analysis\n**URL:** {url}\n**Main Topic:** {main_topic}\n\n"
                         all_content.append(header + content + "\n")
                         processed_urls.add(url)
@@ -278,7 +278,20 @@ class WebCrawler:
                 
                 if not validated_items:
                     raise ValueError("No valid extracted content found")
-                
+
+                # Process landing page content after validation
+                if hasattr(initial_result, "html"):
+                    # Use full markdown content from landing page
+                    content = initial_result.markdown_v2.raw_markdown
+                    if not content:
+                        content = initial_result.html  # Fallback to raw HTML if markdown empty
+                    if content:
+                        print(f"\n✓ Successfully processed landing page: {url}")
+                        # Get main_topic from validated content
+                        main_topic = getattr(validated_items[0], 'main_topic', '')
+                        header = f"# Landing Page Analysis\n**URL:** {url}\n**Main Topic:** {main_topic}\n\n"
+                        all_content.append(header + content + "\n")
+                        processed_urls.add(url)
                 content_item = validated_items[0]
                 print(f"LLM identified {len(content_item.relevant_urls)} relevant URLs")
                 urls_to_process = set()
