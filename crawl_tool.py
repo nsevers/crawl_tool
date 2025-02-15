@@ -252,28 +252,40 @@ class WebCrawler:
                 content_data = initial_result.extracted_content
                 error_message = None
                 
-                # Fix for JSON serialization issue
-                import inspect  # Add missing import
-                if inspect.ismethod(content_data):
-                    try:
+                # Robust content data handling for different response formats
+                try:
+                    # Check if we have a method/function instead of raw data
+                    if callable(content_data):
                         content_data = content_data()
-                    except Exception as e:
-                        print(f"Error calling JSON method: {str(e)}")
-                        content_data = str(content_data)
+                except Exception as e:
+                    print(f"Error converting response data: {str(e)}")
+                    content_data = f"Error decoding response: {str(e)}"
+                
+                # Force serialization for non-basic types
+                if not isinstance(content_data, (str, dict, list, int, float, bool)):
+                    content_data = str(content_data)
 
                 # Handle error responses from LLM
                 error_message = None
                 
-                # Handle list-type errors
+                # Handle list-type errors with better logging
+                error_message = None
                 if isinstance(content_data, list):
+                    error_messages = []
                     for item in content_data:
-                        if isinstance(item, dict) and item.get('error'):
-                            error_message = item.get('content', 'LLM API Error')
-                            break
-                # Handle dict-type errors        
+                        if isinstance(item, dict):
+                            message = item.get('content') or \
+                                     item.get('error', {}).get('message') or \
+                                     item.get('error', 'Unknown list error')
+                            error_messages.append(f"List item error: {message}")
+                    if error_messages:
+                        error_message = "\n".join(error_messages[:3])  # Show first 3 errors only
+                
+                # Handle dict-type errors with better message extraction        
                 elif isinstance(content_data, dict):
-                    error_message = content_data.get('content', 
-                        content_data.get('error', {}).get('message', 'LLM API Error'))
+                    error_message = content_data.get('content') or \
+                        content_data.get('error', {}).get('message') or \
+                        content_data.get('error', 'Unknown dict error')
                 # Handle raw response objects
                 elif hasattr(content_data, 'text'):
                     try:
