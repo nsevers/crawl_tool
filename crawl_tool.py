@@ -207,19 +207,19 @@ class WebCrawler:
                         all_content.append(f"# Documentation from {url}\n\n{content}\n")
                         processed_urls.add(url)
 
-                # Get all links from the landing page
+                # Process only LLM-recommended URLs from initial analysis
+                content_item = ExtractedContent.parse_obj(initial_result.extracted_content)
+                print(f"LLM identified {len(content_item.relevant_urls)} relevant URLs")
                 urls_to_process = set()
-                if hasattr(initial_result, "links"):
-                    for link_data in initial_result.links.get("internal", []):
-                        link_url = link_data.get("href")
-                        if link_url:
-                            # Remove any fragments and normalize
-                            link_url, _ = urldefrag(link_url)
-                            if link_url not in processed_urls and link_filter(link_url):
-                                urls_to_process.add(link_url)
-
-                # Process all discovered links
-                print(f"\nFound {len(urls_to_process)} additional pages to process")
+                
+                # Add recommended URLs that pass our filters
+                for url, reason in zip(content_item.relevant_urls, content_item.relevance_reasons):
+                    # Remove any fragments and normalize
+                    clean_url, _ = urldefrag(url)  
+                    if clean_url not in processed_urls and link_filter(clean_url):
+                        urls_to_process.add(clean_url)
+                        
+                print(f"\nProcessing {len(urls_to_process)} LLM-recommended pages")
                 for link_url in urls_to_process:
                     try:
                         print(f"\nProcessing: {link_url}")
