@@ -251,12 +251,29 @@ class WebCrawler:
                 validated_items = []
                 content_data = initial_result.extracted_content
                 error_message = None
+                
+                # Fix for JSON serialization issue
+                import inspect  # Add missing import
+                if inspect.ismethod(content_data):
+                    try:
+                        content_data = content_data()
+                    except Exception as e:
+                        print(f"Error calling JSON method: {str(e)}")
+                        content_data = str(content_data)
 
                 # Handle error responses from LLM
-                if isinstance(content_data, dict) and content_data.get('error'):
+                error_data = {}
+                if isinstance(content_data, dict) and 'error' in content_data:
+                    error_data = content_data
                     error_message = content_data.get('content', 'LLM API Error')
-                elif isinstance(content_data, str) and 'APIError' in content_data:
-                    error_message = content_data.split('content":')[1].strip('"') if 'content"' in content_data else content_data
+                elif hasattr(content_data, 'text'):  # Handle response objects
+                    try:
+                        error_data = json.loads(content_data.text)
+                        error_message = error_data.get('error', {}).get('message', 'LLM API Error')
+                    except:
+                        error_message = str(content_data.text)
+                elif isinstance(content_data, str):
+                    error_message = content_data
 
                 # If we have an error message, create fallback content
                 if error_message:
@@ -271,6 +288,8 @@ class WebCrawler:
                     try:
                         if isinstance(content_data, str):
                             content_data = json.loads(content_data)
+                        elif hasattr(content_data, 'text'):  # Handle raw response objects
+                            content_data = json.loads(content_data.text)
                         
                         if isinstance(content_data, list) and len(content_data) > 0:
                             content_data = content_data[0]
