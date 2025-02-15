@@ -265,33 +265,13 @@ class WebCrawler:
                 try:
                     result = await crawler.arun(url=link_url, config=non_llm_config)
                     if result.success and hasattr(result, "html"):
-                        content = (result.markdown_v2.raw_markdown
-                                   if hasattr(result, "markdown_v2") and result.markdown_v2.raw_markdown
-                                   else result.html)
-                        # Remove markdown links: keep the link text and, if present, append the tooltip in parentheses.
-                        def replace_md_link(match):
-                            link_text = match.group(1)
-                            tooltip = match.group(3)
-                            if tooltip:
-                                return f"{link_text} (tooltip: {tooltip})"
-                            return link_text
-                        # Transform standard markdown links to show text with tooltip (if available)
-                        content = re.sub(
-                            r'\[([^\]]+)\]\(([^)]+)(?:\s+"([^"]+)")?\)',
-                            lambda m: f"{m.group(1)} (tooltip: {m.group(3)})" if m.group(3) else m.group(1),
-                            content
-                        )
-                        # Transform token-like patterns such as String[](...) 
-                        content = re.sub(
-                            r'(\w+\[\])\(([^)]+)(?:\s+"([^"]+)")?\)',
-                            lambda m: f"{m.group(1)} (tooltip: {m.group(3)})" if m.group(3) else m.group(1),
-                            content
-                        )
-                        # Remove any stray angle-bracketed substrings
-                        content = re.sub(r'<[^>]+>', '', content)
-                        
+                        raw_content = (result.markdown_v2.raw_markdown
+                                       if hasattr(result, "markdown_v2") and result.markdown_v2.raw_markdown
+                                       else result.html)
+                        # Use the built-in fit_markdown function to generate digestible markdown without hyperlinks.
+                        cleaned_content = self.md_generator.fit_markdown(raw_content)
                         page_header = f"## Page Content\nURL: {link_url}\n\n"
-                        all_content.append(page_header + content)
+                        all_content.append(page_header + cleaned_content)
                         self.processed_urls.add(link_url)
                         print(f"Processed: {link_url}")
                     else:
@@ -304,6 +284,8 @@ class WebCrawler:
             if all_content:
                 try:
                     combined_content = "\n".join(all_content)
+                    # Optionally, re-run the generated content through the markdown fitter for consistency:
+                    combined_content = self.md_generator.fit_markdown(combined_content)
                     lines = combined_content.splitlines()
                     total_lines = len(lines)
                     
