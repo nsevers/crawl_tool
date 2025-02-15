@@ -30,19 +30,34 @@ class ExtractedContent(BaseModel):
 class WebCrawler:
     def __init__(self, verbose: bool = True):
         self.total_cost = 0.0
-        openai_key = os.getenv("OPENAI_API_KEY")
-        anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-        openrouter_key = os.getenv("OPENROUTER_API_KEY")
+        # Define provider order
+        providers = ["openrouter", "openai", "anthropic"]
+        keys = {
+            "openai": os.getenv("OPENAI_API_KEY"),
+            "anthropic": os.getenv("ANTHROPIC_API_KEY"),
+            "openrouter": os.getenv("OPENROUTER_API_KEY")
+        }
         
-        keys = {"openai": openai_key, "anthropic": anthropic_key, "openrouter": openrouter_key}
-        active_keys = {k: v for k, v in keys.items() if v and v.strip()}
-        
-        if len(active_keys) > 1:
-            raise ValueError(f"Multiple LLM keys set in environment: {active_keys}. Please only set one.")
-        elif len(active_keys) == 0:
-            raise ValueError("No LLM key set in environment. Please set one of OPENAI_API_KEY, ANTHROPIC_API_KEY, or OPENROUTER_API_KEY.")
+        # Check for an explicit provider
+        explicit_provider = os.getenv("LLM_PROVIDER")
+        if explicit_provider:
+            explicit_provider = explicit_provider.lower().strip()
+            if explicit_provider not in providers:
+                raise ValueError(f"LLM_PROVIDER value '{explicit_provider}' is not one of {providers}.")
+            api_key = keys.get(explicit_provider)
+            if not api_key or not api_key.strip():
+                raise ValueError(f"LLM_PROVIDER is set to '{explicit_provider}' but its corresponding key is not set.")
+            provider_name = explicit_provider
         else:
-            provider_name, api_key = next(iter(active_keys.items()))
+            # Select the first available key in priority order
+            provider_name, api_key = None, None
+            for p in providers:
+                key_val = keys.get(p)
+                if key_val and key_val.strip():
+                    provider_name, api_key = p, key_val
+                    break
+            if not provider_name:
+                raise ValueError("No LLM key set in environment. Please set one of OPENAI_API_KEY, ANTHROPIC_API_KEY, or OPENROUTER_API_KEY.")
         
         # Prepare extra_args WITHOUT any callbacks (to ensure JSON serializability)
         extra_args = {
