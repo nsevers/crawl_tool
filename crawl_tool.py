@@ -255,20 +255,39 @@ class WebCrawler:
                             # Extract content using LLM with relevance scoring
                             try:
                                 extracted = json.loads(result.extracted_content)
-                                # Validate we got the expected fields
-                                # Validate and filter responses
-                                valid_entries = []
+                                
+                                # Handle both single items and lists
+                                if not isinstance(extracted, list):
+                                    extracted = [extracted]
+
+                                # Validate each item against our schema
+                                valid_items = []
                                 for item in extracted:
-                                    if all(k in item for k in ('content', 'relevance_score', 'source_url')):
-                                        valid_entries.append(item)
-                                    else:
-                                        print(f"Invalid LLM response item: {json.dumps(item, indent=2)}")
+                                    try:
+                                        validated = ExtractedContent.model_validate(item)
+                                        valid_items.append(validated)
+                                    except Exception as e:
+                                        print(f"Invalid item skipped: {str(e)}")
+                                        print(f"Invalid item content: {json.dumps(item, indent=2)[:300]}...")
                                 
-                                if not valid_entries:
+                                if not valid_items:
                                     raise ValueError("No valid extracted content found in LLM response")
+
+                                # Aggregate all relevant URLs from valid items
+                                all_relevant_urls = []
+                                all_relevance_reasons = []
+                                main_topics = set()
+                                for item in valid_items:
+                                    all_relevant_urls.extend(item.relevant_urls)
+                                    all_relevance_reasons.extend(item.relevance_reasons)
+                                    main_topics.add(item.main_topic)
                                 
-                                extracted = valid_entries
-                                
+                                # Create consolidated content item
+                                content_item = ExtractedContent(
+                                    relevant_urls=all_relevant_urls,
+                                    relevance_reasons=all_relevance_reasons,
+                                    main_topic=", ".join(main_topics)
+                                )
                             except (json.JSONDecodeError, ValueError, KeyError) as e:
                                 print(f"Failed to parse LLM response: {str(e)}")
                                 print(f"Aborting crawl due to extraction error: {str(e)}")
