@@ -262,18 +262,36 @@ class WebCrawler:
                         content_data = str(content_data)
 
                 # Handle error responses from LLM
-                error_data = {}
-                if isinstance(content_data, dict) and 'error' in content_data:
-                    error_data = content_data
-                    error_message = content_data.get('content', 'LLM API Error')
-                elif hasattr(content_data, 'text'):  # Handle response objects
+                error_message = None
+                
+                # Handle list-type errors
+                if isinstance(content_data, list):
+                    for item in content_data:
+                        if isinstance(item, dict) and item.get('error'):
+                            error_message = item.get('content', 'LLM API Error')
+                            break
+                # Handle dict-type errors        
+                elif isinstance(content_data, dict):
+                    error_message = content_data.get('content', 
+                        content_data.get('error', {}).get('message', 'LLM API Error'))
+                # Handle raw response objects
+                elif hasattr(content_data, 'text'):
                     try:
                         error_data = json.loads(content_data.text)
-                        error_message = error_data.get('error', {}).get('message', 'LLM API Error')
+                        if isinstance(error_data, list):
+                            error_message = error_data[0].get('content', 'LLM API Error')
+                        else:
+                            error_message = error_data.get('content', 
+                                error_data.get('error', {}).get('message', 'LLM API Error'))
                     except:
                         error_message = str(content_data.text)
+                # Handle string errors        
                 elif isinstance(content_data, str):
                     error_message = content_data
+                
+                # Clean up error message formatting
+                if error_message:
+                    error_message = error_message.strip('[]"')  # Remove JSON array brackets and quotes
 
                 # If we have an error message, create fallback content
                 if error_message:
