@@ -209,23 +209,27 @@ class WebCrawler:
                         processed_urls.add(url)
 
                 # Process only LLM-recommended URLs from initial analysis
-                # Parse list of extracted content items and validate each one
-                extracted_items = initial_result.extracted_content
-                if not isinstance(extracted_items, list):
-                    extracted_items = [extracted_items]
-                
-                validated_items = []
-                for item in extracted_items:
-                    if isinstance(item, str):
-                        try:
-                            item = json.loads(item)
-                        except json.JSONDecodeError as e:
-                            print(f"Invalid JSON in extracted content: {e}")
-                            continue
-                    try:
-                        validated_items.append(ExtractedContent.model_validate(item))
-                    except Exception as e:
-                        print(f"Validation error in extracted content: {e}")
+                try:
+                    # Parse and validate the extracted content structure
+                    if isinstance(initial_result.extracted_content, str):
+                        content_data = json.loads(initial_result.extracted_content)
+                    else:
+                        content_data = initial_result.extracted_content
+
+                    # Handle case where response is wrapped in a list
+                    if isinstance(content_data, list) and len(content_data) > 0:
+                        content_data = content_data[0]
+                        
+                    content_item = ExtractedContent.model_validate(content_data)
+                    validated_items = [content_item]
+                except json.JSONDecodeError as e:
+                    print(f"Invalid JSON format in extracted content: {e}")
+                    print(f"Raw content: {initial_result.extracted_content[:300]}...")
+                    validated_items = []
+                except Exception as e:
+                    print(f"Validation error in extracted content: {str(e)}")
+                    print(f"Content that failed validation: {json.dumps(content_data, indent=2)[:300]}...")
+                    validated_items = []
                 
                 if not validated_items:
                     raise ValueError("No valid extracted content found")
