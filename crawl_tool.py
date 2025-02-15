@@ -240,8 +240,17 @@ class WebCrawler:
                 
                 # Add recommended URLs that pass our filters
                 for url, reason in zip(content_item.relevant_urls, content_item.relevance_reasons):
-                    # Remove any fragments and normalize
-                    clean_url, _ = urldefrag(url)  
+                    # Clean up LLM-generated URLs and validate
+                    clean_url = urljoin(base_url, url)  # Handle relative paths
+                    clean_url, _ = urldefrag(clean_url)  # Remove fragments
+                    clean_url = clean_url.replace('<', '').replace('>', '')  # Remove angle brackets
+                    
+                    # Validate URL structure
+                    parsed = urlparse(clean_url)
+                    if not parsed.scheme or not parsed.netloc:
+                        print(f"  Skipping invalid URL: {clean_url}")
+                        continue
+                        
                     if clean_url not in processed_urls and link_filter(clean_url):
                         urls_to_process.add(clean_url)
                         
