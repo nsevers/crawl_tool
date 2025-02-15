@@ -29,7 +29,7 @@ class WebCrawler:
 
         # Initialize LLM extraction strategy with OpenRouter 
         self.llm_strategy = LLMExtractionStrategy(
-            provider=f"openrouter/{os.getenv('OPENROUTER_MODEL', 'openrouter/deepseek/deepseek-r1')}",
+            provider=f"{os.getenv('OPENROUTER_MODEL', 'openrouter/deepseek/deepseek-r1')}",
             api_token=api_key,
             extraction_type="schema",
             schema=ExtractedContent.model_json_schema(),
