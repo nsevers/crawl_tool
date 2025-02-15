@@ -5,7 +5,7 @@ from urllib.parse import urljoin, urlparse, urldefrag
 from dotenv import load_dotenv
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
-from crawl4ai.content_filter_strategy import PruningContentFilter
+from crawl4ai.content_filter_strategy import PruningContentFilter, BM25ContentFilter
 from crawl4ai.extraction_strategy import LLMExtractionStrategy, JsonCssExtractionStrategy
 from pydantic import BaseModel, Field
 from typing import List
@@ -97,13 +97,26 @@ class WebCrawler:
             headless=True,
             verbose=verbose
         )
-        self.md_generator = DefaultMarkdownGenerator(
-            content_filter=PruningContentFilter(
-                threshold=0.45,
-                threshold_type="dynamic",
-                min_word_threshold=5
+        # Choose the content filter based on an environment variable.
+        # If BM25_USER_QUERY is set (non-empty), we use BM25ContentFilter for query-based extraction.
+        # Otherwise, we default to PruningContentFilter for a concise, high-density output.
+        bm25_query = os.getenv("BM25_USER_QUERY", "").strip()
+        if bm25_query:
+            self.md_generator = DefaultMarkdownGenerator(
+                content_filter=BM25ContentFilter(
+                    user_query=bm25_query,
+                    bm25_threshold=1.2
+                )
             )
-        )
+        else:
+            self.md_generator = DefaultMarkdownGenerator(
+                content_filter=PruningContentFilter(
+                    threshold=0.45,
+                    threshold_type="dynamic",
+                    min_word_threshold=5
+                )
+            )
+        
         self.processed_urls = set()
 
     async def crawl(self, url: str, user_prompt: str = None) -> None:
@@ -269,13 +282,10 @@ class WebCrawler:
                         raise ValueError("Crawl unsuccessful")
                     if not hasattr(result, "html"):
                         raise ValueError("No HTML content found")
-                    content = (result.markdown_v2.raw_markdown
-                               if hasattr(result, "markdown_v2") and result.markdown_v2.raw_markdown
-                               else result.html)
+                    content = result.markdown_v2.fit_markdown
                     # Process the content using the built-in fit_markdown function (if desired)
-                    cleaned_content = self.md_generator.fit_markdown(content)
                     page_header = f"## Page Content\nURL: {link_url}\n\n"
-                    all_content.append(page_header + cleaned_content)
+                    all_content.append(page_header + content)
                     self.processed_urls.add(link_url)
                     print(f"Processed: {link_url}")
                 except Exception as e:
@@ -287,7 +297,6 @@ class WebCrawler:
                 try:
                     combined_content = "\n".join(all_content)
                     # Optionally, re-run the generated content through the markdown fitter for consistency:
-                    combined_content = self.md_generator.fit_markdown(combined_content)
                     lines = combined_content.splitlines()
                     total_lines = len(lines)
                     
