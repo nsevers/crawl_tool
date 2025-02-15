@@ -10,6 +10,7 @@ from crawl4ai.extraction_strategy import LLMExtractionStrategy
 from pydantic import BaseModel, Field
 from typing import List, Optional, Set, Dict
 import os
+import litellm
 
 class ExtractedContent(BaseModel):
     relevant_urls: List[str] = Field(..., description="List of URLs relevant to the research prompt")
@@ -18,6 +19,7 @@ class ExtractedContent(BaseModel):
 
 class WebCrawler:
     def __init__(self, verbose: bool = True):
+        self.total_cost = 0.0
         # Verify OpenRouter API key format
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key or not api_key.startswith("sk-or-"):
@@ -28,7 +30,10 @@ class WebCrawler:
                 "3. Valid keys start with 'sk-or-'"
             )
 
-        # Initialize LLM extraction strategy with OpenRouter 
+        # Track LLM costs
+        self.total_cost = 0.0
+        
+        # Initialize LLM extraction strategy with OpenRouter (only for landing page)
         self.llm_strategy = LLMExtractionStrategy(
             provider=f"{os.getenv('OPENROUTER_MODEL', 'openrouter/deepseek/deepseek-r1')}",
             api_token=api_key,
@@ -41,6 +46,7 @@ class WebCrawler:
             ),
             api_base="https://openrouter.ai/api/v1",
             extra_args={
+                "litellm_callbacks": [self._track_llm_cost],
                 "headers": {
                     "HTTP-Referer": "https://github.com/your-repo",
                     "X-Title": "Crawl4AI Research Tool",
@@ -73,6 +79,15 @@ class WebCrawler:
         )
         self.processed_urls = set()
         self.page_contents = {}
+
+    def _track_llm_cost(self, kwargs, completion_response, start_time, end_time):
+        """Callback to track LLM API costs"""
+        try:
+            cost = litellm.completion_cost(completion_response=completion_response)
+            self.total_cost += cost
+            print(f"\nLLM API Call Cost: ${cost:.6f} | Total: ${self.total_cost:.6f}")
+        except Exception as e:
+            print(f"Error tracking LLM cost: {str(e)}")
 
     def _get_wait_selector(self, url: str) -> str:
         parsed_url = urlparse(url)
@@ -162,9 +177,9 @@ class WebCrawler:
                           "focusing on technical documentation, API references, " \
                           "and developer guides."
 
-        # Configure the crawler with LLM strategy
+        # Configure the crawler with LLM strategy only for initial page
         self.llm_strategy.instruction = user_prompt
-        run_config = CrawlerRunConfig(
+        llm_run_config = CrawlerRunConfig(
             extraction_strategy=self.llm_strategy,
             cache_mode=CacheMode.BYPASS,
             markdown_generator=self.md_generator,
@@ -177,14 +192,41 @@ class WebCrawler:
             page_timeout=30000
         )
 
+        # Non-LLM config for subsequent pages
+        schema = {
+            "name": "Documentation Research",
+            "baseSelector": "body",
+            "fields": [
+                {
+                    "name": "content",
+                    "selector": "body",
+                    "type": "markdown",
+                    "transform": ["trim"]
+                }
+            ]
+        }
+        self.non_llm_strategy = JsonCssExtractionStrategy(schema, verbose=True)
+        non_llm_config = CrawlerRunConfig(
+            extraction_strategy=self.non_llm_strategy,
+            cache_mode=CacheMode.BYPASS,
+            markdown_generator=self.md_generator,
+            verbose=False,
+            process_iframes=True,
+            word_count_threshold=1,
+            excluded_tags=[],
+            remove_overlay_elements=True,
+            wait_for=self._get_wait_selector(url),
+            page_timeout=15000
+        )
+
         # Create link filter
         link_filter = self._create_link_filter(base_url)
 
         try:
             async with AsyncWebCrawler(config=self.browser_config) as crawler:
-                # First process landing page
+                # First process landing page with LLM
                 try:
-                    initial_result = await crawler.arun(url=url, config=run_config)
+                    initial_result = await crawler.arun(url=url, config=llm_run_config)
                 except Exception as e:
                     print(f"\nRetrying landing page without wait condition...")
                     run_config = run_config.clone()
@@ -205,7 +247,8 @@ class WebCrawler:
                         content = initial_result.html  # Fallback to raw HTML if markdown empty
                     if content:
                         print(f"\n✓ Successfully processed landing page: {url}")
-                        all_content.append(f"# Documentation from {url}\n\n{content}\n")
+                        header = f"# Landing Page Analysis\n**URL:** {url}\n**Main Topic:** {content_item.main_topic}\n\n"
+                        all_content.append(header + content + "\n")
                         processed_urls.add(url)
 
                 # Process only LLM-recommended URLs from initial analysis
@@ -258,7 +301,8 @@ class WebCrawler:
                 for link_url in urls_to_process:
                     try:
                         print(f"\nProcessing: {link_url}")
-                        result = await crawler.arun(url=link_url, config=run_config)
+                        # Use non-LLM config for subsequent pages
+                        result = await crawler.arun(url=link_url, config=non_llm_config)
                         
                         if result.success and hasattr(result, "html"):
                             # Extract content using LLM with relevance scoring
@@ -311,8 +355,8 @@ class WebCrawler:
                                     print(f"Crawling LLM-recommended URL: {url} ({reason})")
                                     result = await crawler.arun(url=url, config=run_config)
                                     if result.success:
-                                        content = result.markdown_v2.raw_markdown
-                                        all_content.append(f"# {content_item.main_topic}\n\n## {url}\n\n{content}")
+                                        content = f"## Page Content\n**URL:** {url}\n\n{result.markdown_v2.raw_markdown}"
+                                        all_content.append(content)
                                         processed_urls.add(url)
                                 print(f"✓ Successfully processed: {link_url}")
                             else:
