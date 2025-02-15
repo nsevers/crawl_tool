@@ -210,28 +210,29 @@ class WebCrawler:
                            if hasattr(initial_result, "markdown_v2") and initial_result.markdown_v2.raw_markdown
                            else initial_result.html)
                 main_topic = "N/A"
+                link_summary = "No recommended links found."
                 try:
                     content_data = initial_result.extracted_content
+                    if not content_data:
+                        raise ValueError("Empty LLM response for extracted content")
                     if isinstance(content_data, str):
                         content_data = json.loads(content_data)
                     if isinstance(content_data, list) and len(content_data) > 0:
                         content_data = content_data[0]
                     content_item = ExtractedContent.model_validate(content_data)
                     main_topic = content_item.main_topic
+                    if content_item.relevant_urls and content_item.relevance_reasons:
+                        link_summary = "\n".join(
+                            [f"- {u}: {r}" for u, r in zip(content_item.relevant_urls, content_item.relevance_reasons)]
+                        )
                 except Exception as e:
-                    print(f"Error parsing main topic: {str(e)}")
-                if content_item.relevant_urls and content_item.relevance_reasons:
-                    link_summary = "\n".join(
-                        [f"- {u}: {r}" for u, r in zip(content_item.relevant_urls, content_item.relevance_reasons)]
-                    )
-                else:
-                    link_summary = "No recommended links found."
+                    print(f"Error parsing LLM landing page data: {str(e)}")
+                    print("Aborting crawl due to invalid LLM response from the landing page.")
+                    return
                 header = (f"# Landing Page Analysis\nURL: {url}\n"
-                          f"### Research Prompt: {user_prompt}\n\n"
-                          f"Main Topic: {main_topic}\n"
+                          f"### Research Prompt: {user_prompt}\n"
+                          f"Main Topic: {main_topic}\n\n"
                           f"### Recommended Links Summary\n{link_summary}\n\n")
-                
-                
                 all_content.append(header + content)
                 self.processed_urls.add(url)
 
@@ -264,21 +265,22 @@ class WebCrawler:
             for link_url in urls_to_process:
                 try:
                     result = await crawler.arun(url=link_url, config=non_llm_config)
-                    if result.success and hasattr(result, "html"):
-                        raw_content = (result.markdown_v2.raw_markdown
-                                       if hasattr(result, "markdown_v2") and result.markdown_v2.raw_markdown
-                                       else result.html)
-                        # Use the built-in fit_markdown function to generate digestible markdown without hyperlinks.
-                        cleaned_content = self.md_generator.fit_markdown(raw_content)
-                        page_header = f"## Page Content\nURL: {link_url}\n\n"
-                        all_content.append(page_header + cleaned_content)
-                        self.processed_urls.add(link_url)
-                        print(f"Processed: {link_url}")
-                    else:
-                        print(f"Failed to process: {link_url}")
-                    
+                    if not result.success:
+                        raise ValueError("Crawl unsuccessful")
+                    if not hasattr(result, "html"):
+                        raise ValueError("No HTML content found")
+                    content = (result.markdown_v2.raw_markdown
+                               if hasattr(result, "markdown_v2") and result.markdown_v2.raw_markdown
+                               else result.html)
+                    # Process the content using the built-in fit_markdown function (if desired)
+                    cleaned_content = self.md_generator.fit_markdown(content)
+                    page_header = f"## Page Content\nURL: {link_url}\n\n"
+                    all_content.append(page_header + cleaned_content)
+                    self.processed_urls.add(link_url)
+                    print(f"Processed: {link_url}")
                 except Exception as e:
                     print(f"Error processing {link_url}: {str(e)}")
+            
 
             # --- Chunking and saving ---
             if all_content:
