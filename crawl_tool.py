@@ -306,7 +306,16 @@ class WebCrawler:
             
 
             # --- Second LLM Pass ---
-            print("\nStarting second LLM analysis pass on scraped content...")
+            # Set up logger for second pass
+            import logging
+            logger = logging.getLogger('SecondPass')
+            logger.setLevel(logging.INFO)
+            if not logger.handlers:
+                handler = logging.FileHandler('logs/second_pass_analysis.log')
+                handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+                logger.addHandler(handler)
+
+            logger.info("\nStarting second LLM analysis pass on scraped content...")
             second_pass_urls = set()
             
             try:
@@ -331,6 +340,9 @@ class WebCrawler:
                 
                 # Create synthetic URL with aggregated content
                 synthetic_content = "\n".join(first_pass_content)
+                # Log the synthetic content being sent to LLM
+                with open('logs/second_pass_input.log', 'w') as f:
+                    f.write(synthetic_content)
                 synthetic_url = f"raw://{synthetic_content}"
                 
                 # Run second LLM analysis
@@ -349,10 +361,28 @@ class WebCrawler:
                 except Exception as e:
                     print(f"Second pass cost tracking failed: {str(e)}")
 
-                # Process second pass recommendations
+                # Configure file logger for LLM interactions
+                os.makedirs('logs', exist_ok=True)
+                import logging
+                logger = logging.getLogger('LLMInteraction')
+                logger.setLevel(logging.DEBUG)
+                handler = logging.FileHandler('logs/crawl_interactions.log')
+                handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+                logger.addHandler(handler)
+
+                # Process second pass recommendations with better error handling
                 if second_llm_result.extracted_content:
-                    content_data = json.loads(second_llm_result.extracted_content)
-                    content_item = ExtractedContent.model_validate(content_data)
+                    try:
+                        # Log the raw LLM response
+                        logger.debug("Second pass LLM response:\n%s", second_llm_result.extracted_content)
+                        
+                        content_data = json.loads(second_llm_result.extracted_content)
+                        
+                        # Handle case where response might be a list
+                        if isinstance(content_data, list):
+                            content_data = content_data[0]  # Take first item if list
+                            
+                        content_item = ExtractedContent.model_validate(content_data)
                     
                     for rec_url in content_item.second_relevant_urls:
                         clean_url = urljoin(base_url, rec_url)
