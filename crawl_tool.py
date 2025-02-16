@@ -12,6 +12,18 @@ from typing import List
 import os
 import litellm
 
+def strip_markdown_links(text: str) -> str:
+    """
+    Remove markdown hyperlink markup but keep any link text.
+    For example:
+      - "[Link Text](http://example.com "tooltip")" becomes "Link Text"
+      - "String[](https://docs.rs/...)" becomes "String"
+    """
+    # This regex captures the text between the square brackets (which may be empty)
+    # and then drops the entire parenthesized URL/tooltip.
+    return re.sub(r'\[([^\]]*)\]\([^)]*\)', lambda m: m.group(1), text)
+
+
 # Define our extracted content schema
 class ExtractedContent(BaseModel):
     relevant_urls: List[str] = Field(
@@ -97,25 +109,10 @@ class WebCrawler:
             headless=True,
             verbose=verbose
         )
-        # Choose the content filter based on an environment variable.
-        # If BM25_USER_QUERY is set (non-empty), we use BM25ContentFilter for query-based extraction.
-        # Otherwise, we default to PruningContentFilter for a concise, high-density output.
-        bm25_query = os.getenv("BM25_USER_QUERY", "").strip()
-        if bm25_query:
-            self.md_generator = DefaultMarkdownGenerator(
-                content_filter=BM25ContentFilter(
-                    user_query=bm25_query,
-                    bm25_threshold=1.2
-                )
-            )
-        else:
-            self.md_generator = DefaultMarkdownGenerator(
-                content_filter=PruningContentFilter(
-                    threshold=0.45,
-                    threshold_type="dynamic",
-                    min_word_threshold=5
-                )
-            )
+        self.page_generator = DefaultMarkdownGenerator()
+        
+        self.llm_generator = DefaultMarkdownGenerator(
+            options={"ignore_images": True, "skip_internal_links": True})
         
         self.processed_urls = set()
 
@@ -157,7 +154,7 @@ class WebCrawler:
         llm_run_config = CrawlerRunConfig(
             extraction_strategy=self.llm_strategy,
             cache_mode=CacheMode.BYPASS,
-            markdown_generator=self.md_generator,
+            markdown_generator=self.llm_generator,
             verbose=True,
             process_iframes=True,
             word_count_threshold=1,
@@ -169,19 +166,22 @@ class WebCrawler:
             "name": "Documentation Research",
             "baseSelector": "body",
             "fields": [
-                {"name": "content", "selector": "body", "type": "markdown", "transform": ["trim"]}
+                {"name": "content", "selector": "body", "type": "markdown"}
             ]
         }
         non_llm_strategy = JsonCssExtractionStrategy(schema, verbose=True)
         non_llm_config = CrawlerRunConfig(
             extraction_strategy=non_llm_strategy,
             cache_mode=CacheMode.BYPASS,
-            markdown_generator=self.md_generator,
+            markdown_generator=self.page_generator,
             verbose=False,
             process_iframes=True,
             word_count_threshold=1,
             wait_for="css:body",
-            page_timeout=15000
+            page_timeout=15000,
+            excluded_tags=["nav", "aside", "header", "footer"],
+            # Exclude side menu selectors common across pages.
+            excluded_selector="#ads, .tracker, .sidebar, nav.sidebar, .nav-container, nav.mobile-topbar"
         )
 
         def link_filter(link: str) -> bool:
@@ -203,51 +203,50 @@ class WebCrawler:
                 return
 
             # --- Cost tracking ---
-            raw_llm = getattr(initial_result, "llm_response", None)
-            if raw_llm is None:
-                raw_llm = getattr(initial_result, "raw_response", None)
-            if raw_llm:
-                try:
-                    cost = litellm.completion_cost(completion_response=raw_llm)
-                    self.total_cost += cost
-                    print(f"\nLLM API Call Cost: ${cost:.6f} | Total: ${self.total_cost:.6f}")
-                except Exception as e:
-                    print(f"Error tracking LLM cost: {str(e)}")
-            else:
-                print("No raw LLM response available for cost tracking.")
-            
+            try:
+                raw_llm = getattr(initial_result, "llm_response", None) or getattr(initial_result, "raw_response", None)
+                if raw_llm is None:
+                    raise ValueError("No raw LLM response available for cost tracking.")
+                cost = litellm.completion_cost(completion_response=raw_llm)
+                self.total_cost += cost
+                print(f"\nLLM API Call Cost: ${cost:.6f} | Total: ${self.total_cost:.6f}")
+            except Exception as e:
+                print(f"LLM cost tracking failed: {str(e)}")
 
             # --- Process landing page content ---
-            if hasattr(initial_result, "html"):
+            try:
+                if not hasattr(initial_result, "html"):
+                    raise ValueError("No HTML content found in landing page result.")
+                # Use raw_markdown if available; otherwise fall back to HTML.
                 content = (initial_result.markdown_v2.raw_markdown
                            if hasattr(initial_result, "markdown_v2") and initial_result.markdown_v2.raw_markdown
                            else initial_result.html)
                 main_topic = "N/A"
                 link_summary = "No recommended links found."
-                try:
-                    content_data = initial_result.extracted_content
-                    if not content_data:
-                        raise ValueError("Empty LLM response for extracted content")
-                    if isinstance(content_data, str):
-                        content_data = json.loads(content_data)
-                    if isinstance(content_data, list) and len(content_data) > 0:
-                        content_data = content_data[0]
-                    content_item = ExtractedContent.model_validate(content_data)
-                    main_topic = content_item.main_topic
-                    if content_item.relevant_urls and content_item.relevance_reasons:
-                        link_summary = "\n".join(
-                            [f"- {u}: {r}" for u, r in zip(content_item.relevant_urls, content_item.relevance_reasons)]
-                        )
-                except Exception as e:
-                    print(f"Error parsing LLM landing page data: {str(e)}")
-                    print("Aborting crawl due to invalid LLM response from the landing page.")
-                    return
-                header = (f"# Landing Page Analysis\nURL: {url}\n"
-                          f"### Research Prompt: {user_prompt}\n"
-                          f"Main Topic: {main_topic}\n\n"
-                          f"### Recommended Links Summary\n{link_summary}\n\n")
-                all_content.append(header + content)
-                self.processed_urls.add(url)
+                content_data = initial_result.extracted_content
+                if not content_data:
+                    raise ValueError("Empty LLM response for extracted content.")
+                if isinstance(content_data, str):
+                    content_data = json.loads(content_data)
+                if isinstance(content_data, list) and len(content_data) > 0:
+                    content_data = content_data[0]
+                content_item = ExtractedContent.model_validate(content_data)
+                main_topic = content_item.main_topic
+                if content_item.relevant_urls and content_item.relevance_reasons:
+                    link_summary = "\n".join(
+                        [f"- {u}: {r}" for u, r in zip(content_item.relevant_urls, content_item.relevance_reasons)]
+                    )
+            except Exception as e:
+                print(f"Error parsing LLM landing page data: {str(e)}")
+                print("Aborting crawl due to invalid LLM response from the landing page.")
+                return
+            header = (f"# Landing Page Analysis\nURL: {url}\n"
+                      f"### Research Prompt: {user_prompt}\n"
+                      f"Main Topic: {main_topic}\n\n"
+                      f"### Recommended Links Summary\n{link_summary}\n\n")
+            all_content.append(header + content)
+            self.processed_urls.add(url)
+            
 
             # --- Extract recommended URLs from LLM response ---
             try:
@@ -273,6 +272,8 @@ class WebCrawler:
                 clean_url = re.sub(r'<[^>]*>', '', clean_url)
                 if clean_url not in self.processed_urls and link_filter(clean_url):
                     urls_to_process.add(clean_url)
+            if len(urls_to_process) == 0:
+                print("Warning: The LLM Failed to recommend any relevant URLs.")
 
             print(f"\nProcessing {len(urls_to_process)} LLM-recommended pages")
             for link_url in urls_to_process:
@@ -282,9 +283,12 @@ class WebCrawler:
                         raise ValueError("Crawl unsuccessful")
                     if not hasattr(result, "html"):
                         raise ValueError("No HTML content found")
-                    content = result.markdown_v2.fit_markdown
-                    # Process the content using the built-in fit_markdown function (if desired)
-                    page_header = f"## Page Content\nURL: {link_url}\n\n"
+                    # Process the content using the built-in fit_markdown function
+                    raw_content = result.markdown_v2.raw_markdown
+                    # Post-process the content to remove hyperlink markup while keeping the link text and tooltips.
+                    content = strip_markdown_links(raw_content)
+
+                    page_header = f"## Page Content ----------  URL: {link_url} ---------- \n\n"
                     all_content.append(page_header + content)
                     self.processed_urls.add(link_url)
                     print(f"Processed: {link_url}")
