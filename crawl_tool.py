@@ -248,7 +248,8 @@ class WebCrawler:
             header = (f"# Landing Page Analysis\nURL: {url}\n"
                       f"### Research Prompt: {user_prompt}\n"
                       f"Main Topic: {main_topic}\n\n"
-                      f"### Recommended Links Summary\n{link_summary}\n\n")
+                      f"### Recommended Links Summary\n{link_summary}\n\n"
+                      f"### Second Pass Summary After Review\nWe decided to crawl these additional links:\n")
             all_content.append(header + content)
             self.processed_urls.add(url)
             
@@ -403,6 +404,11 @@ class WebCrawler:
                     except Exception as e:
                         print(f"Error processing second pass recommendations: {str(e)}")
                             
+                    # Add second pass links to header
+                    if second_pass_urls:
+                        second_pass_summary = "\n".join([f"- {url}" for url in second_pass_urls])
+                        all_content[0] += f"{second_pass_summary}\n\n"
+                    
                     print(f"Found {len(second_pass_urls)} second-pass recommendations")
                     
                     # Process second pass URLs
