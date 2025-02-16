@@ -309,10 +309,18 @@ class WebCrawler:
             # Set up logger for second pass
             os.makedirs('logs', exist_ok=True)  # Create logs directory first
             import logging
+            # Configure root logger to only write to files
+            logging.basicConfig(
+                level=logging.WARNING,
+                handlers=[logging.NullHandler()]
+            )
+            # Configure our specific logger
             logger = logging.getLogger('SecondPass')
             logger.setLevel(logging.INFO)
-            if not logger.handlers:
-                handler = logging.FileHandler('logs/second_pass_analysis.log')
+            logger.propagate = False  # Prevent propagation to root logger
+            # Clear any existing handlers
+            logger.handlers = []
+            handler = logging.FileHandler('logs/second_pass_analysis.log')
                 handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
                 logger.addHandler(handler)
 
@@ -453,6 +461,13 @@ class WebCrawler:
                 print("\n✗ No content was extracted")
 
 if __name__ == "__main__":
+    # Configure logging before anything else
+    import logging
+    logging.basicConfig(
+        level=logging.WARNING,
+        handlers=[logging.FileHandler('logs/main.log'), logging.StreamHandler()]
+    )
+    
     load_dotenv()
     url = input("Enter URL: ").strip()
     main_prompt = os.getenv("MAIN_RESEARCH_PROMPT")
