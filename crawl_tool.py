@@ -383,8 +383,9 @@ class WebCrawler:
                             content_data = content_data[0]  # Take first item if list
                             
                         content_item = ExtractedContent.model_validate(content_data)
-                    
-                    for rec_url in content_item.second_relevant_urls:
+                        
+                        # Process second relevant URLs
+                        for rec_url in content_item.second_relevant_urls:
                         clean_url = urljoin(base_url, rec_url)
                         clean_url, _ = urldefrag(clean_url)
                         clean_url = re.sub(r'<[^>]*>', '', clean_url)
