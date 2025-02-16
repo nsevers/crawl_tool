@@ -28,11 +28,15 @@ def strip_markdown_links(text: str) -> str:
 class ExtractedContent(BaseModel):
     relevant_urls: List[str] = Field(
         default_factory=list,
-        description="List of URLs relevant to the research prompt"
+        description="List of URLs relevant to the research prompt (first pass)"
+    )
+    second_relevant_urls: List[str] = Field(
+        default_factory=list,
+        description="Additional URLs found in scraped content (second pass)"
     )
     relevance_reasons: List[str] = Field(
         default_factory=list,
-        description="Brief reason for each URL's relevance"
+        description="Brief reason for each URL's relevance across both passes"
     )
     main_topic: str = Field(
         default="Unknown topic - LLM failed to identify main theme",
@@ -98,7 +102,8 @@ class WebCrawler:
                 "Analyze the landing page and identify relevant URLs for documentation research. "
                 "Be discriminating, only follow URLs that are directly related to the main topic and will be useful. "
                 "Return JSON with: 1) relevant_urls 2) brief relevance_reasons 3) main_topic. "
-                "Only include URLs within the same documentation section/subfolder."
+                "Only include URLs within the same documentation section/subfolder. "
+                "Aim to identify 5-20 high-value links that directly relate to the research prompt."
             ),
             api_base="https://openrouter.ai/api/v1",
             extra_args=extra_args,
@@ -275,7 +280,9 @@ class WebCrawler:
             if len(urls_to_process) == 0:
                 print("Warning: The LLM Failed to recommend any relevant URLs.")
 
-            print(f"\nProcessing {len(urls_to_process)} LLM-recommended pages")
+            # First pass processing
+            print(f"\nProcessing {len(urls_to_process)} first-pass LLM-recommended pages")
+            first_pass_content = []
             for link_url in urls_to_process:
                 try:
                     result = await crawler.arun(url=link_url, config=non_llm_config)
@@ -289,12 +296,94 @@ class WebCrawler:
                     content = strip_markdown_links(raw_content)
 
                     page_header = f"## Page Content ----------  URL: {link_url} ---------- \n\n"
-                    all_content.append(page_header + content)
+                    page_content = page_header + content
+                    all_content.append(page_content)
+                    first_pass_content.append(page_content)  # Save for second pass analysis
                     self.processed_urls.add(link_url)
                     print(f"Processed: {link_url}")
                 except Exception as e:
                     print(f"Error processing {link_url}: {str(e)}")
             
+
+            # --- Second LLM Pass ---
+            print("\nStarting second LLM analysis pass on scraped content...")
+            second_pass_urls = set()
+            
+            try:
+                # Update LLM instruction for second pass
+                self.llm_strategy.instruction = (
+                    f"Review the aggregated documentation content and identify 5-20 additional URLs "
+                    f"that are critical for understanding '{main_topic}'. Focus on finding:\n"
+                    f"- Deep links to specific API references\n"
+                    f"- Advanced usage examples\n"
+                    f"- Configuration guides\n"
+                    f"- Integration documentation\n"
+                    f"Original research prompt: {user_prompt}\n"
+                    f"Return JSON with second_relevant_urls and updated relevance_reasons."
+                )
+                
+                # Create temporary config for second pass analysis
+                second_llm_config = CrawlerRunConfig(
+                    extraction_strategy=self.llm_strategy,
+                    cache_mode=CacheMode.BYPASS,
+                    verbose=True
+                )
+                
+                # Create synthetic URL with aggregated content
+                synthetic_content = "\n".join(first_pass_content)
+                synthetic_url = f"raw://{synthetic_content}"
+                
+                # Run second LLM analysis
+                second_llm_result = await crawler.arun(
+                    url=synthetic_url,
+                    config=second_llm_config
+                )
+                
+                # Track second pass cost
+                try:
+                    raw_llm = getattr(second_llm_result, "llm_response", None) or getattr(second_llm_result, "raw_response", None)
+                    if raw_llm:
+                        cost = litellm.completion_cost(completion_response=raw_llm)
+                        self.total_cost += cost
+                        print(f"\nSecond Pass LLM Cost: ${cost:.6f} | Total: ${self.total_cost:.6f}")
+                except Exception as e:
+                    print(f"Second pass cost tracking failed: {str(e)}")
+
+                # Process second pass recommendations
+                if second_llm_result.extracted_content:
+                    content_data = json.loads(second_llm_result.extracted_content)
+                    content_item = ExtractedContent.model_validate(content_data)
+                    
+                    for rec_url in content_item.second_relevant_urls:
+                        clean_url = urljoin(base_url, rec_url)
+                        clean_url, _ = urldefrag(clean_url)
+                        clean_url = re.sub(r'<[^>]*>', '', clean_url)
+                        if clean_url not in self.processed_urls and link_filter(clean_url):
+                            second_pass_urls.add(clean_url)
+                            
+                    print(f"Found {len(second_pass_urls)} second-pass recommendations")
+                    
+                    # Process second pass URLs
+                    if second_pass_urls:
+                        print(f"\nProcessing {len(second_pass_urls)} second-pass LLM-recommended pages")
+                        for link_url in second_pass_urls:
+                            try:
+                                result = await crawler.arun(url=link_url, config=non_llm_config)
+                                if not result.success:
+                                    continue
+                                raw_content = result.markdown_v2.raw_markdown
+                                content = strip_markdown_links(raw_content)
+                                page_header = f"## Page Content ----------  URL: {link_url} ---------- \n\n"
+                                all_content.append(page_header + content)
+                                self.processed_urls.add(link_url)
+                                print(f"Processed: {link_url}")
+                            except Exception as e:
+                                print(f"Error processing {link_url}: {str(e)}")
+                else:
+                    print("No additional URLs found in second pass analysis")
+            
+            except Exception as e:
+                print(f"Second pass analysis failed: {str(e)}")
 
             # --- Chunking and saving ---
             if all_content:
