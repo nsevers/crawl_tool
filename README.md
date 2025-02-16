@@ -1,47 +1,63 @@
-The crawl_tool.py script aims to automate the process of collecting targeted documentation from dynamic web pages and compiling all relevant content into a single Markdown file with the assistance of an AI, so that the relevent information can be utalized by an AI as context in application development or other purposes. 
+# Crawl Tool: A Simple Overview
 
-It manages everything from following links across multiple pages, to removing extraneous HTML or script tags, to ensuring that JavaScript-driven elements are fully loaded before gathering text.
+The `crawl_tool.py` script automatically collects and compiles documentation from dynamic websites into a single Markdown file. An AI helps decide which content is most useful for your needs, such as app development or providing context for another AI. This is extremily useful for quickly fetching and preparing context for AI agents in performing tasks.
 
-Key Objectives
+---
 
-Comprehensive Crawling
+## What Does It Do?
 
-Automatically traverse all sublinks within a domain up until the last folder in the starting url. IE if the starting url is https://www.domain.com/stuff/stuff1/stuff2/index.html, the crawler will only follow links that include the url www.domain.com/stuff/stuff1/stuff2/ 
+1. **Automatic Website Crawling**  
+   - **Deep Link Navigation:**  
+     Starts at your chosen URL and only follows links within that specific folder.  
+     *Example:* If you start at `https://www.domain.com/stuff/stuff1/stuff2/index.html`, the tool will crawl only pages under `/stuff/stuff1/stuff2/`.
+   - **Smart Filtering:**  
+     Only follows links from the same website, ignoring external sites.
 
-Use a programmable “link filter” so relevant links are followed, while external domains are ignored.
+2. **Intelligent Content Extraction**  
+   - **JavaScript-Aware:**  
+     Uses a headless Chromium browser to wait for all dynamic (JavaScript-driven) content to load.
+   - **Clean Output:**  
+     Strips away extra HTML and script tags to provide neat Markdown text.
 
-Intelligent Content Capture
-Employ a headless Chromium browser to wait for page elements that only appear after JavaScript runs.
-Clean up the HTML to produce usable Markdown text without script references or other clutter.
-Single Gathered Output
+3. **AI-Powered Relevance Filtering**  
+   - **First Pass:**  
+     The AI reviews the landing page to pick out key documentation links based on your prompt.
+   - **Second Pass:**  
+     After gathering initial content, the AI conducts a second analysis to find even more useful links and details.
+   - **Custom Prompts:**  
+     Supply your own research prompt (e.g., "Documentation about API endpoints") or use a default prompt.
 
-Run scraped content by an AI agent and let them select if it is relevent or not to the prompt. Consolidate the relevent content from every visited page into one combined Markdown file.
+4. **Consolidated Output**  
+   - **Single Markdown File:**  
+     All relevant content is merged into one Markdown file. If the file is too large, it is split into smaller, manageable chunks.
+   - **Source Information:**  
+     Each section includes the source URL and a relevance score, helping you track where the information came from.
 
-Extensibility for Dynamic Sites
-Integrate with Crawl4AI’s advanced features (JavaScript injection, waiting for specific events, multi-step flows) to handle “Load More” buttons or multi-page forms.
+5. **Dynamic and Extensible**  
+   - **Handles Dynamic Sites:**  
+     Capable of managing “Load More” buttons, multi-page forms, and other dynamic elements.
+   - **Multiple AI Providers:**  
+     Supports various AI backends (OpenRouter, OpenAI, Anthropic) for flexibility.
+   - **Cost and Log Tracking:**  
+     Keeps detailed logs of each step and tracks the cost of AI API calls.
 
-Ease of Use
-1. Input a URL - Must be a valid web address starting with http:// or https://
-2. Input prompt - This guides the AI in determining content relevance (e.g. "Documentation about API endpoints")
-3. Output filename - Content will be saved in markdown format in the 'research' folder
-4. The AI will:
-   - Crawl only within the starting URL's folder structure
-   - Use AI (via OpenRouter) to filter content based on relevance
-   - Structure output with source URLs and 0-1 relevance scores  
-   - Default to full extraction if no prompt provided
-   
-Keep logs or verbose output so users can track the crawler’s progress.
+---
 
-Project Scope
-## Features
+## How to Use the Tool
 
-- Two-pass LLM analysis for comprehensive documentation research
-- Automated URL filtering and deduplication
-- Intelligent content extraction with markdown formatting
-- Configurable AI provider support (OpenRouter, OpenAI, Anthropic)
-- Cost tracking for LLM API calls
-- Automatic chunking of large outputs
-- Detailed logging of crawler decisions
+1. **Enter a URL:**  
+   - The URL must start with `http://` or `https://`.
+
+2. **Enter a Research Prompt:**  
+   - This prompt guides the AI in identifying the most relevant content.
+   - If left empty, a default prompt (set in the environment variables) is used.
+
+3. **Specify an Output Filename:**  
+   - The gathered content is saved as a Markdown file in the `research` folder.
+
+4. **The Process:**  
+   - **Validation:** The tool first checks that the URL is
+
 
 ## Installation
 
@@ -83,3 +99,16 @@ python3 crawl_tool.py
 - Adjust MAX_TOKENS (default 32000) for larger documentation sets
 - Lower TOP_P (0.0-1.0) for more focused responses
 - Logs are saved to logs/ folder for debugging
+
+
+## License
+
+MIT License
+
+Copyright (c) 2025 Noah Severs
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

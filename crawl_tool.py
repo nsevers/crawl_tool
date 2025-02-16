@@ -78,7 +78,7 @@ class WebCrawler:
         # Prepare extra_args WITHOUT any callbacks (to ensure JSON serializability)
         extra_args = {
             "headers": {
-                "HTTP-Referer": "https://github.com/your-project",
+                "HTTP-Referer": "https://github.com/nsevers/crawl_tool",
                 "X-Title": "Smart Documentation Extraction",
                 "Content-Type": "application/json",
                 "X-API-Key": api_key
