@@ -321,8 +321,8 @@ class WebCrawler:
             # Clear any existing handlers
             logger.handlers = []
             handler = logging.FileHandler('logs/second_pass_analysis.log')
-                handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
-                logger.addHandler(handler)
+            handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+            logger.addHandler(handler)
 
             logger.info("\nStarting second LLM analysis pass on scraped content...")
             second_pass_urls = set()
