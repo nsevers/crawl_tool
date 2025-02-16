@@ -33,6 +33,53 @@ Ease of Use
 Keep logs or verbose output so users can track the crawler’s progress.
 
 Project Scope
-A Python-based utility that can be run from the command line (or integrated into other workflows).
-Leverages Crawl4AI for JavaScript‐capable crawling, meaning sites with dynamic navigation or interactive elements can be captured.
-Output is exported in a Markdown format, with optional chunking to avoid extremely large single files.
+## Features
+
+- Two-pass LLM analysis for comprehensive documentation research
+- Automated URL filtering and deduplication
+- Intelligent content extraction with markdown formatting
+- Configurable AI provider support (OpenRouter, OpenAI, Anthropic)
+- Cost tracking for LLM API calls
+- Automatic chunking of large outputs
+- Detailed logging of crawler decisions
+
+## Installation
+
+```bash
+# Clone repository
+git clone https://github.com/yourusername/crawl-tool.git
+cd crawl-tool
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Set up environment
+cp .env.template .env
+```
+
+1. Edit the `.env` file:
+   - Uncomment your preferred LLM provider
+   - Add your API key
+   - Optionally uncomment/update MAIN_RESEARCH_PROMPT
+
+## Usage
+
+```bash
+python3 crawl_tool.py
+```
+
+1. Enter a valid documentation URL when prompted
+2. Enter research prompt OR press enter to use default
+3. The tool will:
+   - Perform initial analysis of landing page
+   - Crawl first-pass recommended links
+   - Perform second-pass analysis of aggregated content
+   - Crawl additional recommended links
+   - Save consolidated markdown to research/ folder
+
+## Configuration Tips
+
+- To skip the interactive prompt, set MAIN_RESEARCH_PROMPT in .env
+- Adjust MAX_TOKENS (default 32000) for larger documentation sets
+- Lower TOP_P (0.0-1.0) for more focused responses
+- Logs are saved to logs/ folder for debugging
