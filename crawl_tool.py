@@ -307,6 +307,7 @@ class WebCrawler:
 
             # --- Second LLM Pass ---
             # Set up logger for second pass
+            os.makedirs('logs', exist_ok=True)  # Create logs directory first
             import logging
             logger = logging.getLogger('SecondPass')
             logger.setLevel(logging.INFO)
