@@ -386,11 +386,13 @@ class WebCrawler:
                         
                         # Process second relevant URLs
                         for rec_url in content_item.second_relevant_urls:
-                        clean_url = urljoin(base_url, rec_url)
-                        clean_url, _ = urldefrag(clean_url)
-                        clean_url = re.sub(r'<[^>]*>', '', clean_url)
-                        if clean_url not in self.processed_urls and link_filter(clean_url):
-                            second_pass_urls.add(clean_url)
+                            clean_url = urljoin(base_url, rec_url)
+                            clean_url, _ = urldefrag(clean_url)
+                            clean_url = re.sub(r'<[^>]*>', '', clean_url)
+                            if clean_url not in self.processed_urls and link_filter(clean_url):
+                                second_pass_urls.add(clean_url)
+                    except Exception as e:
+                        print(f"Error processing second pass recommendations: {str(e)}")
                             
                     print(f"Found {len(second_pass_urls)} second-pass recommendations")
                     
